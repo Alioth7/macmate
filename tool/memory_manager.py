@@ -24,8 +24,8 @@ class MemoryManager:
             with open(self.daily_logs_file, 'w', encoding='utf-8') as f:
                 json.dump([], f)
 
-    @registry.register("add_long_term_plan", "Add a new long-term plan/goal. Args: content(str), target_date(str 'YYYY-MM-DD' optional)")
-    def add_plan(self, content: str, target_date: str = "") -> str:
+    @registry.register("add_long_term_plan", "Add a new long-term plan/goal. Args: content(str), custom_prompt(str optional), target_date(str 'YYYY-MM-DD' optional)")
+    def add_plan(self, content: str, custom_prompt: str = "", target_date: str = "") -> str:
         try:
             with open(self.plans_file, 'r', encoding='utf-8') as f:
                 plans = json.load(f)
@@ -33,6 +33,7 @@ class MemoryManager:
             new_plan = {
                 "id": len(plans) + 1,
                 "content": content,
+                "custom_prompt": custom_prompt,
                 "created_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "target_date": target_date,
                 "status": "active"
@@ -64,6 +65,26 @@ class MemoryManager:
             return result
         except Exception as e:
             return f"Error reading plans: {e}"
+
+    def get_plans_data(self) -> list:
+        """Helper for UI to get raw list of plans."""
+        try:
+            if not os.path.exists(self.plans_file):
+                return []
+            with open(self.plans_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return []
+
+    def get_logs_data(self) -> list:
+        """Helper for UI to get raw list of logs."""
+        try:
+            if not os.path.exists(self.daily_logs_file):
+                return []
+            with open(self.daily_logs_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return []
 
     @registry.register("save_daily_summary", "Save a daily summary/log. Args: date(str 'YYYY-MM-DD'), summary(str), suggestions(str)")
     def save_daily_log(self, date: str, summary: str, suggestions: str) -> str:

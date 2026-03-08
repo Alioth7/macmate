@@ -281,3 +281,107 @@ class MacCalendarAdapter(CalendarController):
             print(f"💣 读取日历异常: {e}")
             return []
 
+    def get_detailed_events(self, start_time: str, end_time: str) -> list:
+        """
+        返回结构化日历数据 (List of Dict)，供前端渲染图表。
+        格式: [{'Task': 'Meeting', 'Start': dt, 'Finish': dt, 'Resource': '...'}, ...]
+        """
+        try:
+            fmt = "%Y-%m-%d %H:%M"
+            # 容错秒
+            if len(start_time.split(':')) == 3: start_time = start_time.rsplit(':', 1)[0]
+            if len(end_time.split(':')) == 3: end_time = end_time.rsplit(':', 1)[0]
+            
+            dt_start = datetime.datetime.strptime(start_time, fmt)
+            dt_end = datetime.datetime.strptime(end_time, fmt)
+            
+            ns_start = self._datetime_to_nsdate(dt_start)
+            ns_end = self._datetime_to_nsdate(dt_end)
+            
+            predicate = self.store.predicateForEventsWithStartDate_endDate_calendars_(ns_start, ns_end, None)
+            events = self.store.eventsMatchingPredicate_(predicate)
+            
+            result = []
+            if not events: return []
+            
+            for e in events:
+                s_ts = e.startDate().timeIntervalSince1970()
+                e_ts = e.endDate().timeIntervalSince1970()
+                
+                start_dt = datetime.datetime.fromtimestamp(s_ts)
+                end_dt = datetime.datetime.fromtimestamp(e_ts)
+                
+                duration_hours = (end_dt - start_dt).total_seconds() / 3600
+                
+                result.append({
+                    "Task": e.title(),
+                    "Start": start_dt.strftime("%Y-%m-%d %H:%M"),
+                    "Finish": end_dt.strftime("%Y-%m-%d %H:%M"),
+                    "Resource": "Calendar",  # 用于 Gantt 颜色分组
+                    "Duration": f"{duration_hours:.1f}h"
+                })
+            return result
+        except Exception as e:
+            print(f"Error fetching detailed events: {e}")
+            return []
+
+    def update_event_time(self, title: str, old_start_str: str, new_start_str: str, new_end_str: str) -> str:
+        """
+        修改日程时间。
+        由于 EventKit 没有直接 ID 查询 (跨 Session 可能失效)，我们用 Title + Old Start 定位。
+        """
+        try:
+            fmt = "%Y-%m-%d %H:%M"
+            
+            # 容错秒
+            if len(old_start_str.split(':')) == 3: old_start_str = old_start_str.rsplit(':', 1)[0]
+            if len(new_start_str.split(':')) == 3: new_start_str = new_start_str.rsplit(':', 1)[0]
+            if len(new_end_str.split(':')) == 3: new_end_str = new_end_str.rsplit(':', 1)[0]
+
+            # 1. 解析时间
+            old_start_dt = datetime.datetime.strptime(old_start_str, fmt)
+            new_start_dt = datetime.datetime.strptime(new_start_str, fmt)
+            new_end_dt = datetime.datetime.strptime(new_end_str, fmt)
+
+            # 2. 查找原事件 (范围放宽一点避免秒级误差)
+            # 在 old_start 前后几小时找
+            search_start = old_start_dt - datetime.timedelta(hours=24)
+            search_end = old_start_dt + datetime.timedelta(hours=24) 
+
+            ns_start = self._datetime_to_nsdate(search_start)
+            ns_end = self._datetime_to_nsdate(search_end)
+            
+            predicate = self.store.predicateForEventsWithStartDate_endDate_calendars_(ns_start, ns_end, None)
+            events = self.store.eventsMatchingPredicate_(predicate)
+            
+            target_event = None
+            if events:
+                for e in events:
+                    if e.title() == title:
+                        # 进一步确认开始时间接近 (误差小于 5 分钟)
+                        e_start_ts = e.startDate().timeIntervalSince1970()
+                        e_start = datetime.datetime.fromtimestamp(e_start_ts)
+                        
+                        # 比较时要把 old_start_dt 视作本地时间
+                        diff = abs((e_start - old_start_dt).total_seconds())
+                        if diff < 300: 
+                            target_event = e
+                            break
+            
+            if not target_event:
+                return f"Error: Could not find event '{title}' around {old_start_str}"
+            
+            # 3. 修改并保存
+            target_event.setStartDate_(self._datetime_to_nsdate(new_start_dt))
+            target_event.setEndDate_(self._datetime_to_nsdate(new_end_dt))
+            
+            success, error = self.store.saveEvent_span_error_(target_event, 0, None)
+            
+            if success:
+                return f"Success: Updated '{title}' to {new_start_str} - {new_end_str}"
+            else:
+                return f"Error saving event: {error}"
+
+        except Exception as e:
+            return f"Exception updating event: {e}"
+
