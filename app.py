@@ -29,6 +29,10 @@ if "brain" not in st.session_state:
     st.session_state.brain = LLMBrain()
     st.session_state.messages = [{"role": "assistant", "content": "你好！我是你的 MacMate 智能助手。有什么我可以帮你的吗？"}]
 
+# Re-bind tools on every rerun to handle Streamlit module reloading
+if "adapter" in st.session_state:
+    registry.bind_instance(st.session_state.adapter)
+
 if "memory_manager" not in st.session_state:
     st.session_state.memory_manager = MemoryManager("./data")
 
@@ -292,13 +296,28 @@ with tab3:
     st.header("⚡️ 艾森豪威尔矩阵")
     st.markdown("让 AI 帮你分析哪些事情重要，哪些事情紧急。")
     
-    if st.button("开始分析 (基于未来7天日程)"):
+    col1, col2 = st.columns(2)
+    with col1:
+        btn_7days = st.button("开始分析 (基于未来7天日程)", use_container_width=True)
+    with col2:
+        btn_today = st.button("开始分析 (今日至明早6点)", use_container_width=True)
+
+    if btn_7days or btn_today:
         with st.spinner("正在读取日历并进行 AI 分析..."):
             # 1. Get events
             get_events_func = registry.get_tool("get_calendar_events")
             if get_events_func:
-                now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                end_str = (datetime.datetime.now() + datetime.timedelta(days=7)).strftime("%Y-%m-%d %H:%M")
+                now = datetime.datetime.now()
+                now_str = now.strftime("%Y-%m-%d %H:%M")
+                
+                if btn_today:
+                    # Explicitly set end time to tomorrow 6:00 AM
+                    tomorrow = now + datetime.timedelta(days=1)
+                    end_dt = tomorrow.replace(hour=6, minute=0, second=0, microsecond=0)
+                    end_str = end_dt.strftime("%Y-%m-%d %H:%M")
+                else:
+                    end_str = (now + datetime.timedelta(days=7)).strftime("%Y-%m-%d %H:%M")
+
                 events_text = get_events_func(start_time=now_str, end_time=end_str)
                 
                 # 2. Call Brain to classify

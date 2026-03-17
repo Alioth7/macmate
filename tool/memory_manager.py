@@ -30,8 +30,13 @@ class MemoryManager:
             with open(self.plans_file, 'r', encoding='utf-8') as f:
                 plans = json.load(f)
             
+            # Use max id + 1 to avoid duplicate IDs
+            new_id = 1
+            if plans:
+                new_id = max(p.get('id', 0) for p in plans) + 1
+
             new_plan = {
-                "id": len(plans) + 1,
+                "id": new_id,
                 "content": content,
                 "custom_prompt": custom_prompt,
                 "created_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -47,6 +52,51 @@ class MemoryManager:
         except Exception as e:
             return f"Error adding plan: {e}"
 
+    @registry.register("update_long_term_plan", "Update an existing long-term plan. Args: id(int), content(str), custom_prompt(str optional), target_date(str optional)")
+    def update_plan(self, id: int, content: str, custom_prompt: str = "", target_date: str = "") -> str:
+        try:
+            with open(self.plans_file, 'r', encoding='utf-8') as f:
+                plans = json.load(f)
+            
+            found = False
+            for p in plans:
+                if p.get('id') == id:
+                    p['content'] = content
+                    p['custom_prompt'] = custom_prompt
+                    p['target_date'] = target_date
+                    p['updated_at'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    found = True
+                    break
+            
+            if not found:
+                return f"Error: Plan with ID {id} not found."
+            
+            with open(self.plans_file, 'w', encoding='utf-8') as f:
+                json.dump(plans, f, ensure_ascii=False, indent=2)
+                
+            return f"Success: Long-term plan ID {id} updated."
+        except Exception as e:
+            return f"Error updating plan: {e}"
+
+    @registry.register("delete_long_term_plan", "Delete a long-term plan. Args: id(int)")
+    def delete_plan(self, id: int) -> str:
+        try:
+            with open(self.plans_file, 'r', encoding='utf-8') as f:
+                plans = json.load(f)
+            
+            initial_len = len(plans)
+            plans = [p for p in plans if p.get('id') != id]
+            
+            if len(plans) == initial_len:
+                return f"Error: Plan with ID {id} not found."
+            
+            with open(self.plans_file, 'w', encoding='utf-8') as f:
+                json.dump(plans, f, ensure_ascii=False, indent=2)
+                
+            return f"Success: Long-term plan ID {id} deleted."
+        except Exception as e:
+            return f"Error deleting plan: {e}"
+
     @registry.register("get_long_term_plans", "Get all long-term plans. No args.")
     def get_plans(self) -> str:
         try:
@@ -61,7 +111,12 @@ class MemoryManager:
                 status = p.get('status', 'active')
                 target = f" (Target: {p.get('target_date')})" if p.get('target_date') else ""
                 created = p.get('created_at', '')
-                result += f"- [ID: {p['id']}] {p['content']}{target} (Created: {created}) [{status}]\n"
+                
+                details = ""
+                if p.get('custom_prompt'):
+                    details = f"\n  > Context/Prompt: {p.get('custom_prompt')}"
+
+                result += f"- [ID: {p['id']}] {p['content']}{target} (Created: {created}) [{status}]{details}\n"
             return result
         except Exception as e:
             return f"Error reading plans: {e}"

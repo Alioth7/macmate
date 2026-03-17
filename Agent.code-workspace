@@ -1,7 +1,32 @@
 {
-    "folders": [
-        {
-            "path": "."
-        }
-    ]
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {},
+	"launch": {
+		"configurations": [
+			{
+				"type": "swift",
+				"request": "launch",
+				"args": [],
+				"cwd": "${workspaceFolder:Agent}/macos-ui",
+				"name": "Debug MacMateUI (Agent/macos-ui)",
+				"target": "MacMateUI",
+				"configuration": "debug",
+				"preLaunchTask": "swift: Build Debug MacMateUI (Agent/macos-ui)"
+			},
+			{
+				"type": "swift",
+				"request": "launch",
+				"args": [],
+				"cwd": "${workspaceFolder:Agent}/macos-ui",
+				"name": "Release MacMateUI (Agent/macos-ui)",
+				"target": "MacMateUI",
+				"configuration": "release",
+				"preLaunchTask": "swift: Build Release MacMateUI (Agent/macos-ui)"
+			}
+		]
+	}
 }

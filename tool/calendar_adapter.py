@@ -33,6 +33,16 @@ class MacCalendarAdapter(CalendarController):
             dt_start = datetime.datetime.strptime(start_time, fmt)
             dt_end = datetime.datetime.strptime(end_time, fmt)
 
+            # --- 时间检查逻辑 ---
+            now = datetime.datetime.now()
+            # 允许 5 分钟的误差（考虑思考时间）
+            if dt_start < now - datetime.timedelta(minutes=5):
+                return f"Error: Cannot schedule event in the past (Start time {start_time} is earlier than Now {now.strftime('%Y-%m-%d %H:%M')}). Please check the date."
+
+            if dt_end <= dt_start:
+                return f"Error: End time ({end_time}) must be later than Start time ({start_time})."
+            # ------------------
+
             event = EventKit.EKEvent.eventWithEventStore_(self.store)
             event.setTitle_(title)
             event.setStartDate_(self._datetime_to_nsdate(dt_start))
