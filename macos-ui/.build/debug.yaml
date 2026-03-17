@@ -1,0 +1,81 @@
+client:
+  name: basic
+  file-system: device-agnostic
+tools: {}
+targets:
+  "MacMateUI-x86_64-apple-macosx14.0-debug.exe": ["<MacMateUI-x86_64-apple-macosx14.0-debug.exe>"]
+  "MacMateUI-x86_64-apple-macosx14.0-debug.module": ["<MacMateUI-x86_64-apple-macosx14.0-debug.module>"]
+  "PackageStructure": ["<PackageStructure>"]
+  "main": ["<MacMateUI-x86_64-apple-macosx14.0-debug.exe>","<MacMateUI-x86_64-apple-macosx14.0-debug.module>"]
+  "test": ["<MacMateUI-x86_64-apple-macosx14.0-debug.exe>","<MacMateUI-x86_64-apple-macosx14.0-debug.module>"]
+default: "main"
+nodes:
+  "/Users/itcmac/Desktop/Agent/macos-ui/Sources/MacMateUI/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI":
+    is-mutated: true
+commands:
+  "/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI-entitlement.plist":
+    tool: write-auxiliary-file
+    inputs: ["<entitlement-plist>","<com.apple.security.get-task-allow>"]
+    outputs: ["/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI-entitlement.plist"]
+    description: "Write auxiliary file /Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI-entitlement.plist"
+
+  "/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/itcmac/Desktop/Agent/macos-ui/Sources/MacMateUI/MacMateUIApp.swift","/Users/itcmac/Desktop/Agent/macos-ui/Sources/MacMateUI/Models.swift","/Users/itcmac/Desktop/Agent/macos-ui/Sources/MacMateUI/NativeCalendarService.swift","/Users/itcmac/Desktop/Agent/macos-ui/Sources/MacMateUI/Panels.swift","/Users/itcmac/Desktop/Agent/macos-ui/Sources/MacMateUI/PythonBridgeService.swift","/Users/itcmac/Desktop/Agent/macos-ui/Sources/MacMateUI/QuadrantPanelView.swift","/Users/itcmac/Desktop/Agent/macos-ui/Sources/MacMateUI/RootView.swift"]
+    outputs: ["/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/sources"]
+    description: "Write auxiliary file /Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/sources"
+
+  "/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.product/Objects.LinkFileList":
+    tool: write-auxiliary-file
+    inputs: ["<link-file-list>","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/MacMateUIApp.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/Models.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/NativeCalendarService.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/Panels.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/PythonBridgeService.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/QuadrantPanelView.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/RootView.swift.o"]
+    outputs: ["/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.product/Objects.LinkFileList"]
+    description: "Write auxiliary file /Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.product/Objects.LinkFileList"
+
+  "/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/swift-version--1AB21518FC5DEDBE.txt":
+    tool: write-auxiliary-file
+    inputs: ["<swift-get-version>","/Library/Developer/CommandLineTools/usr/bin/swiftc"]
+    outputs: ["/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/swift-version--1AB21518FC5DEDBE.txt"]
+    always-out-of-date: "true"
+    description: "Write auxiliary file /Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/swift-version--1AB21518FC5DEDBE.txt"
+
+  "<MacMateUI-x86_64-apple-macosx14.0-debug.exe>":
+    tool: phony
+    inputs: ["<MacMateUI-x86_64-apple-macosx14.0-debug.exe-CodeSigning>"]
+    outputs: ["<MacMateUI-x86_64-apple-macosx14.0-debug.exe>"]
+
+  "<MacMateUI-x86_64-apple-macosx14.0-debug.module>":
+    tool: phony
+    inputs: ["/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/MacMateUIApp.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/Models.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/NativeCalendarService.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/Panels.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/PythonBridgeService.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/QuadrantPanelView.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/RootView.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/Modules/MacMateUI.swiftmodule"]
+    outputs: ["<MacMateUI-x86_64-apple-macosx14.0-debug.module>"]
+
+  "C.MacMateUI-x86_64-apple-macosx14.0-debug.exe":
+    tool: shell
+    inputs: ["/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/MacMateUIApp.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/Models.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/NativeCalendarService.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/Panels.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/PythonBridgeService.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/QuadrantPanelView.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/RootView.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.product/Objects.LinkFileList"]
+    outputs: ["/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI"]
+    description: "Linking ./.build/x86_64-apple-macosx/debug/MacMateUI"
+    args: ["/Library/Developer/CommandLineTools/usr/bin/swiftc","-L","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug","-o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI","-module-name","MacMateUI","-Xlinker","-no_warn_duplicate_libraries","-emit-executable","-Xlinker","-alias","-Xlinker","_MacMateUI_main","-Xlinker","_main","-Xlinker","-rpath","-Xlinker","@loader_path","@/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.product/Objects.LinkFileList","-target","x86_64-apple-macosx13.0","-Xlinker","-add_ast_path","-Xlinker","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/Modules/MacMateUI.swiftmodule","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g"]
+
+  "C.MacMateUI-x86_64-apple-macosx14.0-debug.exe-entitlements":
+    tool: shell
+    inputs: ["/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI-entitlement.plist"]
+    outputs: ["<MacMateUI-x86_64-apple-macosx14.0-debug.exe-CodeSigning>"]
+    description: "Applying debug entitlements to ./.build/x86_64-apple-macosx/debug/MacMateUI"
+    args: ["codesign","--force","--sign","-","--entitlements","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI-entitlement.plist","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI"]
+
+  "C.MacMateUI-x86_64-apple-macosx14.0-debug.module":
+    tool: shell
+    inputs: ["/Users/itcmac/Desktop/Agent/macos-ui/Sources/MacMateUI/MacMateUIApp.swift","/Users/itcmac/Desktop/Agent/macos-ui/Sources/MacMateUI/Models.swift","/Users/itcmac/Desktop/Agent/macos-ui/Sources/MacMateUI/NativeCalendarService.swift","/Users/itcmac/Desktop/Agent/macos-ui/Sources/MacMateUI/Panels.swift","/Users/itcmac/Desktop/Agent/macos-ui/Sources/MacMateUI/PythonBridgeService.swift","/Users/itcmac/Desktop/Agent/macos-ui/Sources/MacMateUI/QuadrantPanelView.swift","/Users/itcmac/Desktop/Agent/macos-ui/Sources/MacMateUI/RootView.swift","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/swift-version--1AB21518FC5DEDBE.txt","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/sources"]
+    outputs: ["/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/MacMateUIApp.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/Models.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/NativeCalendarService.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/Panels.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/PythonBridgeService.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/QuadrantPanelView.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/RootView.swift.o","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/Modules/MacMateUI.swiftmodule"]
+    description: "Compiling Swift Module 'MacMateUI' (7 sources)"
+    args: ["/Library/Developer/CommandLineTools/usr/bin/swiftc","-module-name","MacMateUI","-emit-dependencies","-emit-module","-emit-module-path","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/Modules/MacMateUI.swiftmodule","-output-file-map","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/output-file-map.json","-incremental","-c","@/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/MacMateUI.build/sources","-I","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/Modules","-target","x86_64-apple-macosx13.0","-enable-batch-mode","-index-store-path","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/index/store","-Onone","-enable-testing","-j8","-DSWIFT_PACKAGE","-DDEBUG","-module-cache-path","/Users/itcmac/Desktop/Agent/macos-ui/.build/x86_64-apple-macosx/debug/ModuleCache","-parseable-output","-Xfrontend","-entry-point-function-name","-Xfrontend","MacMateUI_main","-color-diagnostics","-swift-version","5","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g","-Xcc","-isysroot","-Xcc","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-Xcc","-fPIC","-Xcc","-g","-package-name","macos_ui"]
+
+  "PackageStructure":
+    tool: package-structure-tool
+    inputs: ["/Users/itcmac/Desktop/Agent/macos-ui/Sources/MacMateUI/","/Users/itcmac/Desktop/Agent/macos-ui/Package.swift","/Users/itcmac/Desktop/Agent/macos-ui/Package.resolved"]
+    outputs: ["<PackageStructure>"]
+    description: "Planning build"
+    allow-missing-inputs: true
+
