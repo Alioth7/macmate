@@ -39,7 +39,7 @@ class LLMBrain:
 
         return f"""
 你是一个运行在 macOS 上的智能操作系统代理 (MacMate)。
-你现在可以使用 [日历/Calendar] 和 [长期记忆/Long-Term Memory] 工具。
+你现在可以使用 [日历/Calendar]、[长期记忆/Long-Term Memory] 和 [系统监控与使用时长/System Monitoring] 工具。
 当前时间: {now_str}
 
 【用户的核心长期目标 (Core Long-Term Goals)】:
@@ -71,6 +71,9 @@ class LLMBrain:
     - 当用户询问“总结”、“简报”、“建议”或“我该干什么”时，**必须**先调用 `get_past_daily_logs` (获取过去日志) 或 `get_long_term_plans` (获取长期目标) 来获取上下文。
     - 绝不要在没有上下文的情况下给建议。
     - 使用 `save_daily_summary` 来记录用户的重要进展或你的建议。
+- **行为分析提醒 (Usage + Schedule Reminder)**:
+    - 当用户询问“我今天效率怎么样”、“提醒我该专注了”、“结合日程分析我现在该做什么”时，优先调用 `sample_activity_usage` 和 `get_activity_usage_summary`。
+    - 如果用户提供了日程 JSON（或你已查询到结构化事件），再调用 `analyze_schedule_reminders` 输出提醒建议。
 
 示例 (Example):
 User: "我今天该干点什么？"

@@ -90,6 +90,91 @@ struct QuadrantItem: Identifiable {
     }
 }
 
+struct UsageAppItem: Identifiable {
+    var id: String { app + "_" + String(hours) }
+    let app: String
+    let hours: Double
+
+    static func from(json: [String: JSONValue]) -> UsageAppItem {
+        UsageAppItem(
+            app: json["app"]?.stringValue ?? "Unknown",
+            hours: json["hours"]?.doubleValue ?? 0.0
+        )
+    }
+}
+
+struct BackgroundHotspotItem: Identifiable {
+    var id: String { name + "_" + String(weightedHours) }
+    let name: String
+    let weightedHours: Double
+
+    static func from(json: [String: JSONValue]) -> BackgroundHotspotItem {
+        BackgroundHotspotItem(
+            name: json["name"]?.stringValue ?? "Unknown",
+            weightedHours: json["weighted_hours"]?.doubleValue ?? 0.0
+        )
+    }
+}
+
+struct ProductivityUsageSummary {
+    let totalTrackedHours: Double
+    let focusHours: Double
+    let distractionHours: Double
+    let distractionRatio: Double
+    let contextSwitches: Int
+    let topApps: [UsageAppItem]
+    let backgroundHotspots: [BackgroundHotspotItem]
+
+    static let empty = ProductivityUsageSummary(
+        totalTrackedHours: 0,
+        focusHours: 0,
+        distractionHours: 0,
+        distractionRatio: 0,
+        contextSwitches: 0,
+        topApps: [],
+        backgroundHotspots: []
+    )
+
+    static func from(json: [String: JSONValue]) -> ProductivityUsageSummary {
+        let appItems = json["top_apps"]?.arrayValue?.compactMap { value -> UsageAppItem? in
+            guard let obj = value.objectValue else { return nil }
+            return UsageAppItem.from(json: obj)
+        } ?? []
+
+        let hotspotItems = json["background_hotspots"]?.arrayValue?.compactMap { value -> BackgroundHotspotItem? in
+            guard let obj = value.objectValue else { return nil }
+            return BackgroundHotspotItem.from(json: obj)
+        } ?? []
+
+        return ProductivityUsageSummary(
+            totalTrackedHours: json["total_tracked_hours"]?.doubleValue ?? 0.0,
+            focusHours: json["focus_hours"]?.doubleValue ?? 0.0,
+            distractionHours: json["distraction_hours"]?.doubleValue ?? 0.0,
+            distractionRatio: json["distraction_ratio"]?.doubleValue ?? 0.0,
+            contextSwitches: json["context_switches"]?.intValue ?? 0,
+            topApps: appItems,
+            backgroundHotspots: hotspotItems
+        )
+    }
+}
+
+struct ProductivityReminderItem: Identifiable {
+    var id: String { type + "_" + message }
+    let type: String
+    let severity: String
+    let message: String
+    let action: String
+
+    static func from(json: [String: JSONValue]) -> ProductivityReminderItem {
+        ProductivityReminderItem(
+            type: json["type"]?.stringValue ?? "info",
+            severity: json["severity"]?.stringValue ?? "info",
+            message: json["message"]?.stringValue ?? "",
+            action: json["action"]?.stringValue ?? ""
+        )
+    }
+}
+
 struct LLMSettingsData {
     var mode: String = "api"
     var apiURL: String = ""
@@ -156,6 +241,15 @@ enum JSONValue: Codable {
             if value.lowercased() == "false" { return false }
             return nil
         case .int(let value): return value != 0
+        default: return nil
+        }
+    }
+
+    var doubleValue: Double? {
+        switch self {
+        case .number(let value): return value
+        case .int(let value): return Double(value)
+        case .string(let value): return Double(value)
         default: return nil
         }
     }

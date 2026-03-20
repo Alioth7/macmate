@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 from core.llm_brain import LLMBrain
 from tool.calendar_adapter import MacCalendarAdapter
 from tool.memory_manager import MemoryManager
+from tool.system_monitor import SystemMonitor
 from core.tools import registry
 import datetime
 
@@ -25,6 +26,9 @@ if "brain" not in st.session_state:
     st.session_state.adapter = adapter # Save adapter instance
     memory_manager = MemoryManager("./data")
     st.session_state.memory_manager = memory_manager
+    system_monitor = SystemMonitor("./data")
+    system_monitor.start_activity_watch(interval_sec=30)
+    st.session_state.system_monitor = system_monitor
     # Initialize Brain
     st.session_state.brain = LLMBrain()
     st.session_state.messages = [{"role": "assistant", "content": "你好！我是你的 MacMate 智能助手。有什么我可以帮你的吗？"}]
@@ -35,6 +39,13 @@ if "adapter" in st.session_state:
 
 if "memory_manager" not in st.session_state:
     st.session_state.memory_manager = MemoryManager("./data")
+
+if "system_monitor" in st.session_state:
+    registry.bind_instance(st.session_state.system_monitor)
+
+if "system_monitor" not in st.session_state:
+    st.session_state.system_monitor = SystemMonitor("./data")
+    st.session_state.system_monitor.start_activity_watch(interval_sec=30)
 
 # Function for Agent Callback to update UI
 def agent_callback(step_type, content, container=None):

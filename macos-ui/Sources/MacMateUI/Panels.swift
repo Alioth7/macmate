@@ -715,3 +715,155 @@ struct LLMSettingsPanelView: View {
         }
     }
 }
+
+struct ProductivityPanelView: View {
+    @EnvironmentObject private var bridge: PythonBridgeService
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Productivity")
+                    .font(.custom("Avenir Next Demi Bold", size: 28))
+                Spacer()
+                Button("Refresh") {
+                    Task { await bridge.loadProductivityReminders() }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            HStack(spacing: 10) {
+                metricCard(title: "Tracked", value: String(format: "%.1fh", bridge.productivityUsage.totalTrackedHours))
+                metricCard(title: "Focus", value: String(format: "%.1fh", bridge.productivityUsage.focusHours))
+                metricCard(title: "Distract", value: String(format: "%.1fh", bridge.productivityUsage.distractionHours))
+                metricCard(title: "Switches", value: "\(bridge.productivityUsage.contextSwitches)")
+                metricCard(title: "Distract %", value: String(format: "%.0f%%", bridge.productivityUsage.distractionRatio * 100.0))
+            }
+
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Top Apps")
+                        .font(.custom("Avenir Next Demi Bold", size: 17))
+
+                    if bridge.productivityUsage.topApps.isEmpty {
+                        Text("暂无数据")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ScrollView(showsIndicators: true) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                ForEach(bridge.productivityUsage.topApps) { item in
+                                    HStack {
+                                        Text(item.app)
+                                        Spacer()
+                                        Text(String(format: "%.1fh", item.hours))
+                                            .font(.custom("Menlo", size: 12))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .padding(.trailing, 6)
+                        }
+                        .scrollIndicators(.visible)
+                        .frame(maxHeight: 180)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Background Hotspots")
+                        .font(.custom("Avenir Next Demi Bold", size: 17))
+
+                    if bridge.productivityUsage.backgroundHotspots.isEmpty {
+                        Text("暂无数据")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ScrollView(showsIndicators: true) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                ForEach(bridge.productivityUsage.backgroundHotspots) { item in
+                                    HStack {
+                                        Text(item.name)
+                                        Spacer()
+                                        Text(String(format: "%.1fh", item.weightedHours))
+                                            .font(.custom("Menlo", size: 12))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .padding(.trailing, 6)
+                        }
+                        .scrollIndicators(.visible)
+                        .frame(maxHeight: 180)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Divider()
+
+            Text("Reminders")
+                .font(.custom("Avenir Next Demi Bold", size: 19))
+
+            if bridge.productivityReminders.isEmpty {
+                Text("暂无提醒，点击 Refresh 获取最新分析")
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView(showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(bridge.productivityReminders) { reminder in
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text(reminder.type)
+                                        .font(.custom("Menlo", size: 11))
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    Text(reminder.severity.uppercased())
+                                        .font(.custom("Menlo", size: 11))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(Color.accentColor.opacity(0.18))
+                                        .clipShape(Capsule())
+                                }
+                                Text(reminder.message)
+                                    .font(.custom("Avenir Next", size: 14))
+                                Text("建议: \(reminder.action)")
+                                    .font(.custom("Avenir Next", size: 13))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(10)
+                            .background(Color.secondary.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                    }
+                    .padding(.trailing, 8)
+                }
+                .scrollIndicators(.visible)
+            }
+
+            if !bridge.productivityStatus.isEmpty {
+                Text(bridge.productivityStatus)
+                    .font(.custom("Menlo", size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .onAppear {
+            if bridge.productivityReminders.isEmpty {
+                Task { await bridge.loadProductivityReminders() }
+            }
+        }
+    }
+
+    private func metricCard(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.custom("Avenir Next", size: 12))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.custom("Avenir Next Demi Bold", size: 18))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Color.secondary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}

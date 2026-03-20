@@ -4,6 +4,7 @@ import AppKit
 private enum AppSection: String, CaseIterable, Identifiable {
     case chat = "Chat"
     case calendar = "Calendar"
+    case productivity = "Productivity"
     case quadrant = "Quadrant"
     case plans = "Plans"
     case daily = "Daily"
@@ -51,6 +52,7 @@ struct RootView: View {
                     switch selection {
                     case .chat: ChatPanelView()
                     case .calendar: CalendarPanelView()
+                    case .productivity: ProductivityPanelView()
                     case .quadrant: QuadrantPanelView()
                     case .plans: PlansPanelView()
                     case .daily: DailyPanelView()
@@ -97,6 +99,7 @@ struct RootView: View {
         switch section {
         case .chat: return "message"
         case .calendar: return "calendar"
+        case .productivity: return "gauge.with.dots.needle.67percent"
         case .quadrant: return "chart.xyaxis.line"
         case .plans: return "target"
         case .daily: return "note.text"

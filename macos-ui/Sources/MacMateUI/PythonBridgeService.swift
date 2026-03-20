@@ -12,6 +12,9 @@ final class PythonBridgeService: ObservableObject {
     @Published var plans: [PlanItem] = []
     @Published var logs: [DailyLogItem] = []
     @Published var quadrantItems: [QuadrantItem] = []
+    @Published var productivityUsage: ProductivityUsageSummary = .empty
+    @Published var productivityReminders: [ProductivityReminderItem] = []
+    @Published var productivityStatus: String = ""
     @Published var latestTrace: [String] = []
     @Published var llmSettings: LLMSettingsData = .init()
     @Published var llmConfigStatus: String = ""
@@ -401,6 +404,32 @@ final class PythonBridgeService: ObservableObject {
             }
         } catch {
             statusText = "Failed to load quadrant analysis."
+        }
+    }
+
+    func loadProductivityReminders() async {
+        productivityStatus = "分析中..."
+        do {
+            let envelope = try await request(action: "productivity_reminders", payload: [:])
+            guard let result = envelope.result?.objectValue else {
+                productivityStatus = "后端返回为空"
+                return
+            }
+
+            if let usageObj = result["usage"]?.objectValue {
+                productivityUsage = ProductivityUsageSummary.from(json: usageObj)
+            } else {
+                productivityUsage = .empty
+            }
+
+            let reminders = result["reminders"]?.arrayValue?.compactMap { value -> ProductivityReminderItem? in
+                guard let obj = value.objectValue else { return nil }
+                return ProductivityReminderItem.from(json: obj)
+            } ?? []
+            productivityReminders = reminders
+            productivityStatus = "已更新提醒"
+        } catch {
+            productivityStatus = "加载失败: \(error.localizedDescription)"
         }
     }
 

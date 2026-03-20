@@ -37,6 +37,7 @@ class BridgeRuntime:
 
         self.memory = MemoryManager("./data")
         self.monitor = SystemMonitor()
+        self.monitor.start_activity_watch(interval_sec=30)
         self.llm_config_store = LLMConfigStore("./data/llm_config.json")
         self.brain = None
 
@@ -245,6 +246,29 @@ class BridgeRuntime:
                 return {"time": snapshot.get("time"), "alerts": alerts, "snapshot": snapshot}
             except Exception as exc:
                 return {"error": f"system risk detection failed: {exc}"}
+
+        if action == "productivity_reminders":
+            try:
+                self.monitor.sample_activity_once()
+                usage = self.monitor.get_usage_summary(days=1)
+
+                now = datetime.now()
+                start = now.replace(hour=0, minute=0, second=0, microsecond=0).strftime("%Y-%m-%d %H:%M")
+                end = now.replace(hour=23, minute=59, second=59, microsecond=0).strftime("%Y-%m-%d %H:%M")
+
+                events = []
+                if self.adapter is not None:
+                    events = self.adapter.get_detailed_events(start, end)
+
+                reminders = self.monitor.analyze_schedule_reminders(events=events or [], usage_summary=usage)
+                return {
+                    "time": now.strftime("%Y-%m-%d %H:%M:%S"),
+                    "usage": usage,
+                    "events": events or [],
+                    "reminders": reminders,
+                }
+            except Exception as exc:
+                return {"error": f"productivity reminder analysis failed: {exc}"}
 
         if action == "llm_config_get":
             cfg = self.llm_config_store.load()

@@ -4,11 +4,15 @@ import sys
 from core.llm_brain import LLMBrain
 from tool.calendar_adapter import MacCalendarAdapter
 from tool.memory_manager import MemoryManager
+from tool.system_monitor import SystemMonitor
 
 # 初始化工具（这会触发 @registry.register）
 adapter = MacCalendarAdapter()
 # 初始化长期记忆模块
 memory_manager = MemoryManager("./data")
+# 初始化系统监控模块（注册工具并开始采样）
+system_monitor = SystemMonitor("./data")
+system_monitor.start_activity_watch(interval_sec=30)
 
 def signal_handler(sig, frame):
     print('\n👋 Exiting MacMate...')
