@@ -8,6 +8,11 @@ from core.llm_brain import LLMBrain
 from tool.calendar_adapter import MacCalendarAdapter
 from tool.memory_manager import MemoryManager
 from tool.system_monitor import SystemMonitor
+from tool.shell_executor import ShellExecutor
+from tool.scene_profiles import SceneProfileManager
+from tool.music_controller import MusicController
+from tool.weather_service import WeatherService
+from tool.scheduler import MacMateScheduler
 from core.tools import registry
 import datetime
 
@@ -29,9 +34,15 @@ if "brain" not in st.session_state:
     system_monitor = SystemMonitor("./data")
     system_monitor.start_activity_watch(interval_sec=30)
     st.session_state.system_monitor = system_monitor
+    # New tool modules
+    st.session_state.shell_executor = ShellExecutor(mode="agent")
+    st.session_state.scene_profiles = SceneProfileManager()
+    st.session_state.music_controller = MusicController()
+    st.session_state.weather_service = WeatherService()
+    st.session_state.scheduler = MacMateScheduler()
     # Initialize Brain
     st.session_state.brain = LLMBrain()
-    st.session_state.messages = [{"role": "assistant", "content": "你好！我是你的 MacMate 智能助手。有什么我可以帮你的吗？"}]
+    st.session_state.messages = [{"role": "assistant", "content": "Hello! I'm MacMate. How can I help?"}]
 
 # Re-bind tools on every rerun to handle Streamlit module reloading
 if "adapter" in st.session_state:

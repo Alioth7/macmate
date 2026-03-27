@@ -7,13 +7,40 @@ struct ChatPanelView: View {
     @State private var inputText = ""
     @State private var isStepsExpanded = true
     @State private var isThinking = false
+    @State private var toastMessage = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("Agent Chat")
                     .font(.custom("Avenir Next Demi Bold", size: 28))
+
+                if !toastMessage.isEmpty {
+                    Text(toastMessage)
+                        .font(.caption)
+                        .foregroundColor(.green)
+                        .transition(.opacity)
+                }
+
                 Spacer()
+                Button(action: {
+                    bridge.loadChatHistory()
+                    showToast("✅ 已加载")
+                }) {
+                    Image(systemName: "arrow.down.doc")
+                }
+                .buttonStyle(.plain)
+                .help("加载最近聊天记录")
+
+                Button(action: {
+                    bridge.saveChatHistory()
+                    showToast("✅ 已保存")
+                }) {
+                    Image(systemName: "square.and.arrow.down")
+                }
+                .buttonStyle(.plain)
+                .help("保存聊天记录")
+
                 Button(action: {
                     Task { await bridge.clearChat() }
                 }) {
@@ -72,25 +99,36 @@ struct ChatPanelView: View {
                 }
             }
 
-            HStack(spacing: 12) {
-                TextField("输入任务，比如：帮我安排周五下午代码评审", text: $inputText)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.custom("Avenir Next", size: 15))
-                    .disabled(isThinking)
+            HStack(alignment: .bottom, spacing: 12) {
+                ChatInputField(text: $inputText, isDisabled: isThinking) {
+                    sendMessage()
+                }
 
                 Button("Send") {
-                    let prompt = inputText
-                    inputText = ""
-                    bridge.latestTrace.removeAll() // clean up old trace
-                    isThinking = true
-                    Task { 
-                        await bridge.sendChat(prompt: prompt) 
-                        isThinking = false
-                    }
+                    sendMessage()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(isThinking || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+        }
+    }
+
+    private func sendMessage() {
+        let prompt = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return }
+        inputText = ""
+        bridge.latestTrace.removeAll()
+        isThinking = true
+        Task {
+            await bridge.sendChat(prompt: prompt)
+            isThinking = false
+        }
+    }
+
+    private func showToast(_ message: String) {
+        withAnimation { toastMessage = message }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            withAnimation { toastMessage = "" }
         }
     }
 
@@ -587,6 +625,9 @@ struct LLMSettingsPanelView: View {
                 Group {
                     TextField("API URL (OpenAI-compatible /chat/completions)", text: $bridge.llmSettings.apiURL)
                         .textFieldStyle(.roundedBorder)
+                    Text("💡 输入基础 URL 即可 (如 https://api.openai.com)，系统会自动补全 /v1/chat/completions")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     SecureField("API Key", text: $bridge.llmSettings.apiKey)
                         .textFieldStyle(.roundedBorder)
                     TextField("Model", text: $bridge.llmSettings.apiModel)
@@ -704,6 +745,39 @@ struct LLMSettingsPanelView: View {
                     .background(Color.secondary.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
+
+            Divider()
+
+            // Shell Security Mode
+            Text("Shell Security Mode")
+                .font(.custom("Avenir Next Demi Bold", size: 18))
+
+            Picker("Security Mode", selection: $bridge.shellSecurityMode) {
+                Text("Strict — 用户审查每条命令").tag("strict")
+                Text("Agent — AI 自主判断").tag("agent")
+                Text("Self-supervised — LLM 安全审查").tag("self_supervised")
+            }
+            .pickerStyle(.radioGroup)
+
+            Group {
+                switch bridge.shellSecurityMode {
+                case "strict":
+                    Text("每条 Shell 命令执行前都需要用户手动确认，最安全。")
+                case "agent":
+                    Text("AI 可执行大部分命令，但黑名单中的危险命令 (rm -rf, mkfs 等) 仍被拦截。")
+                case "self_supervised":
+                    Text("所有命令先经 LLM 安全审查后再执行，需要 LLM 已配置。")
+                default:
+                    EmptyView()
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            Button("Apply") {
+                Task { await bridge.setShellSecurityMode(bridge.shellSecurityMode) }
+            }
+            .buttonStyle(.bordered)
 
             Spacer()
         }

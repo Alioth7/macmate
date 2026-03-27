@@ -5,6 +5,7 @@ struct QuadrantPanelView: View {
     @EnvironmentObject private var bridge: PythonBridgeService
     @State private var isLoading = false
     @State private var showList = false
+    @State private var errorMessage = ""
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -29,8 +30,19 @@ struct QuadrantPanelView: View {
                         .padding(.leading, 10)
                 }
             }
+
+            if !errorMessage.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(errorMessage)
+                        .foregroundColor(.orange)
+                        .font(.custom("Avenir Next", size: 13))
+                    Text("提示: 请确保LLM已配置，并在「系统设置 → 隐私与安全 → 日历」中授权。")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                }
+            }
             
-            if bridge.quadrantItems.isEmpty {
+            if bridge.quadrantItems.isEmpty && errorMessage.isEmpty {
                 Text("暂无数据，请点击上方按钮进行AI分析。")
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -128,7 +140,13 @@ struct QuadrantPanelView: View {
     private func fetchData(period: String) {
         Task {
             isLoading = true
+            errorMessage = ""
             await bridge.loadQuadrantAnalysis(period: period)
+            if bridge.quadrantItems.isEmpty {
+                errorMessage = bridge.statusText.contains("Failed") || bridge.statusText.contains("error")
+                    ? bridge.statusText
+                    : "分析未返回数据，请检查LLM配置和日历权限。"
+            }
             isLoading = false
         }
     }

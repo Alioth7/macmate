@@ -13,10 +13,16 @@ struct BridgeRequest: Encodable {
     let payload: [String: JSONValue]
 }
 
-struct ChatMessage: Identifiable {
-    let id = UUID()
+struct ChatMessage: Identifiable, Codable {
+    let id: UUID
     let role: String
     let content: String
+
+    init(role: String, content: String) {
+        self.id = UUID()
+        self.role = role
+        self.content = content
+    }
 }
 
 struct CalendarEvent: Identifiable {

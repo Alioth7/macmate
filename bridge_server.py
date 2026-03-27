@@ -9,6 +9,11 @@ import requests
 
 from tool.memory_manager import MemoryManager
 from tool.system_monitor import SystemMonitor
+from tool.shell_executor import ShellExecutor
+from tool.scene_profiles import SceneProfileManager
+from tool.music_controller import MusicController
+from tool.weather_service import WeatherService
+from tool.scheduler import MacMateScheduler
 from core.llm_config import LLMConfigStore
 
 try:
@@ -38,12 +43,25 @@ class BridgeRuntime:
         self.memory = MemoryManager("./data")
         self.monitor = SystemMonitor()
         self.monitor.start_activity_watch(interval_sec=30)
+        self.shell_executor = ShellExecutor(mode="agent")
+        self.scene_profiles = SceneProfileManager()
+        self.music_controller = MusicController()
+        self.weather_service = WeatherService()
+        self.scheduler = MacMateScheduler()
         self.llm_config_store = LLMConfigStore("./data/llm_config.json")
         self.brain = None
 
         if LLMBrain is not None:
             try:
                 self.brain = LLMBrain()
+                # Register nightly briefing task
+                def _nightly():
+                    if self.brain:
+                        try:
+                            self.brain.run_cycle("请根据今天的使用数据和日程，生成一份每日简报并保存。")
+                        except Exception:
+                            pass
+                self.scheduler.register_daily_task(22, 0, "每日简报", _nightly)
             except Exception:
                 self.brain = None
 
@@ -269,6 +287,43 @@ class BridgeRuntime:
                 }
             except Exception as exc:
                 return {"error": f"productivity reminder analysis failed: {exc}"}
+
+        if action == "shell_exec":
+            cmd = payload.get("command", "")
+            return {"result": self.shell_executor.run_shell_command_tool(command=cmd)}
+
+        if action == "shell_security_mode":
+            mode = payload.get("mode")
+            if mode:
+                return {"result": self.shell_executor.set_shell_security_mode_tool(mode=mode)}
+            return {"result": self.shell_executor.get_shell_security_mode_tool()}
+
+        if action == "scene_activate":
+            profile = payload.get("profile", "focus")
+            if profile == "relax":
+                return {"result": self.scene_profiles.activate_relax_mode_tool()}
+            return {"result": self.scene_profiles.activate_focus_mode_tool()}
+
+        if action == "music_control":
+            sub = payload.get("action", "play")
+            app = payload.get("app", "apple_music")
+            if sub == "play":
+                return {"result": self.music_controller.play_music_tool(app=app, genre=payload.get("genre", ""))}
+            elif sub == "pause":
+                return {"result": self.music_controller.pause_music_tool(app=app)}
+            elif sub == "next":
+                return {"result": self.music_controller.next_track_tool(app=app)}
+            elif sub == "previous":
+                return {"result": self.music_controller.previous_track_tool(app=app)}
+            elif sub == "now_playing":
+                return {"result": self.music_controller.get_now_playing_tool()}
+            elif sub == "volume":
+                return {"result": self.music_controller.set_volume_tool(level=payload.get("level", "50"))}
+            return {"error": f"unknown music action: {sub}"}
+
+        if action == "weather":
+            city = payload.get("city", "")
+            return {"result": self.weather_service.get_current_weather_tool(city=city)}
 
         if action == "llm_config_get":
             cfg = self.llm_config_store.load()

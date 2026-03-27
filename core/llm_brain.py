@@ -2,19 +2,41 @@ import json
 import datetime
 import requests
 import re
-import config
 import ast
 from core.tools import registry
+from core.llm_config import LLMConfigStore
 
 class LLMBrain:
     def __init__(self):
-        self.api_url = config.API_URL
-        self.headers = {
-            "Authorization": f"Bearer {config.API_KEY}",
-            "Content-Type": "application/json"
-        }
-        # 修改为用户指定的 DeepSeek V3.2 模型 ID
-        self.model = "deepseek/deepseek-v3.2-251201" 
+        cfg_store = LLMConfigStore("./data/llm_config.json")
+        cfg = cfg_store.load()
+
+        self.config_store = cfg_store
+        self._mode = cfg.get("mode", "api")  # api | ollama
+        self.configured = False
+
+        if self._mode == "ollama":
+            host = cfg.get("ollama_host", "http://127.0.0.1:11434")
+            self.api_url = f"{host.rstrip('/')}/api/chat"
+            self.headers = {"Content-Type": "application/json"}
+            self.model = cfg.get("ollama_model", "qwen2.5:7b")
+            self.configured = True
+        else:
+            self.api_url = cfg.get("api_url", "")
+            api_key = cfg.get("api_key", "")
+            self.headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+            self.model = cfg.get("api_model", "deepseek/deepseek-v3.2-251201")
+            self.configured = bool(self.api_url and api_key)
+
+        if not self.configured:
+            print("\n" + "=" * 60)
+            print("\u26a0\ufe0f  LLM \u672a\u914d\u7f6e\uff01\u8bf7\u5728 LLM Settings \u9762\u677f\u4e2d\u8bbe\u7f6e API URL/Key \u6216 Ollama\u3002")
+            print("   \u914d\u7f6e\u6587\u4ef6: ./data/llm_config.json")
+            print("=" * 60 + "\n")
+
         self.history = []
         self.system_prompt_str = self._build_system_prompt()
         self.history.append({"role": "system", "content": self.system_prompt_str})
@@ -37,10 +59,24 @@ class LLMBrain:
             pass
         # ----------------------------------
 
+        # --- weather context (non-blocking) ---
+        weather_context = None
+        try:
+            from tool.weather_service import WeatherService
+            _ws = WeatherService.__new__(WeatherService)
+            _ws._default_city = ""
+            _ws.WTTR_URL = WeatherService.WTTR_URL
+            _ws.TIMEOUT = 3
+            weather_context = _ws.get_weather_summary()
+        except Exception:
+            pass
+        weather_line = f"\n当前天气: {weather_context}" if weather_context else ""
+        # ----------------------------------
+
         return f"""
 你是一个运行在 macOS 上的智能操作系统代理 (MacMate)。
-你现在可以使用 [日历/Calendar]、[长期记忆/Long-Term Memory] 和 [系统监控与使用时长/System Monitoring] 工具。
-当前时间: {now_str}
+你的能力覆盖：日历管理、长期记忆、系统监控、Shell 命令执行、场景切换、音乐控制、天气查询、定时提醒。
+当前时间: {now_str}{weather_line}
 
 【用户的核心长期目标 (Core Long-Term Goals)】:
 {plans_context}
@@ -74,6 +110,18 @@ class LLMBrain:
 - **行为分析提醒 (Usage + Schedule Reminder)**:
     - 当用户询问“我今天效率怎么样”、“提醒我该专注了”、“结合日程分析我现在该做什么”时，优先调用 `sample_activity_usage` 和 `get_activity_usage_summary`。
     - 如果用户提供了日程 JSON（或你已查询到结构化事件），再调用 `analyze_schedule_reminders` 输出提醒建议。
+- **Shell 命令安全协议**:
+    - 调用 `run_shell_command` 前，**必须**在 THOUGHT 中写清楚即将执行的完整命令。
+    - 如果工具返回“needs user confirmation”，你必须使用 ANSWER 询问用户是否确认执行。
+    - 用户确认后，使用 `run_shell_command_confirmed` 执行。
+    - **绝不**尝试绕过安全机制或拆分危险命令来规避检测。
+- **音乐控制**:
+    - 支持 Apple Music (apple_music) 和 网易云音乐 (netease)。
+    - 如果用户没有指定平台，优先尝试 Apple Music。
+    - 可以结合当前时间和天气信息推断用户心境，主动推荐适合的歌单。
+- **场景预设**:
+    - “专注模式”/ “开始工作” -> 调用 `activate_focus_mode`。
+    - “休闲模式”/ “下班了” -> 调用 `activate_relax_mode`。
 
 示例 (Example):
 User: "我今天该干点什么？"
@@ -97,6 +145,8 @@ ANSWER: 基于你“精通 Python”的目标，鉴于昨天觉得装饰器很�
 
     def generate_text(self, prompt, system_instruction=None):
         """Generate a simple text response without ReAct loop/tools."""
+        if not self.configured:
+            return "\u26a0\ufe0f LLM \u672a\u914d\u7f6e\u3002\u8bf7\u5148\u5728 LLM Settings \u4e2d\u8bbe\u7f6e API \u6216 Ollama \u914d\u7f6e\u3002"
         sys_prompt = system_instruction if system_instruction else "You are a helpful assistant."
         messages = [
             {"role": "system", "content": sys_prompt},
@@ -123,6 +173,11 @@ ANSWER: 基于你“精通 Python”的目标，鉴于昨天觉得装饰器很�
             max_steps: 最大循环次数
             step_callback: 回调函数，参数为 (step_type, content)，用于UI更新
         """
+        if not self.configured:
+            msg = "\u26a0\ufe0f LLM \u672a\u914d\u7f6e\u3002\u8bf7\u5728 LLM Settings \u4e2d\u8bbe\u7f6e API URL/Key \u6216\u914d\u7f6e Ollama\uff0c\u7136\u540e\u91cd\u542f\u5e94\u7528\u3002"
+            if step_callback:
+                step_callback("error", msg)
+            return msg
         # 更新时间戳（重新生成 system prompt）但保留之前的 conversation history
         current_sys_prompt = self._build_system_prompt()
         # 如果 history 为空或者第一条不是最新的 system prompt

@@ -7,6 +7,15 @@ final class PythonBridgeService: ObservableObject {
     @Published var chatMessages: [ChatMessage] = [
         ChatMessage(role: "assistant", content: "你好，我是 MacMate。")
     ]
+
+    /// Chat history file in the project's cache/ directory.
+    private var chatHistoryURL: URL {
+        let bridgePath = resolveBridgePath()
+        let projectDir = URL(fileURLWithPath: bridgePath).deletingLastPathComponent()
+        let cacheDir = projectDir.appendingPathComponent("cache", isDirectory: true)
+        try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        return cacheDir.appendingPathComponent("chat_history.json")
+    }
     @Published var calendarEvents: [CalendarEvent] = []
     @Published var calendarPermissionDenied: Bool = false
     @Published var plans: [PlanItem] = []
@@ -22,6 +31,7 @@ final class PythonBridgeService: ObservableObject {
     @Published var ollamaStatusMessage: String = ""
     @Published var ollamaModels: [String] = []
     @Published var ollamaRunOutput: String = ""
+    @Published var shellSecurityMode: String = "strict"
 
     private var process: Process?
     private var stdinPipe: Pipe?
@@ -33,6 +43,7 @@ final class PythonBridgeService: ObservableObject {
 
     func startBridgeProcessIfNeeded() {
         guard process == nil else { return }
+        loadChatHistory()
 
         let bridgePath = resolveBridgePath()
         let pythonExec = ProcessInfo.processInfo.environment["MACMATE_PYTHON"] ?? "python3"
@@ -123,6 +134,20 @@ final class PythonBridgeService: ObservableObject {
             llmConfigStatus = "已保存 LLM 配置"
         } catch {
             llmConfigStatus = "保存失败: \(error.localizedDescription)"
+        }
+    }
+
+    func setShellSecurityMode(_ mode: String) async {
+        do {
+            let envelope = try await request(action: "shell_security_mode", payload: ["mode": .string(mode)])
+            if let result = envelope.result?.objectValue,
+               let msg = result["result"]?.stringValue {
+                llmConfigStatus = "Shell: \(msg)"
+            } else {
+                llmConfigStatus = "Shell 模式已设为: \(mode)"
+            }
+        } catch {
+            llmConfigStatus = "设置失败: \(error.localizedDescription)"
         }
     }
 
@@ -256,18 +281,46 @@ final class PythonBridgeService: ObservableObject {
             // latestTrace is now populated in real-time via stream events
 
             chatMessages.append(ChatMessage(role: "assistant", content: answer))
+            saveChatHistory()
         } catch {
             chatMessages.append(ChatMessage(role: "assistant", content: "请求失败: \(error.localizedDescription)"))
+            saveChatHistory()
         }
     }
 
     func clearChat() async {
         chatMessages = [ChatMessage(role: "assistant", content: "上下文已清空，我们可以开始新的对话了。")]
         latestTrace.removeAll()
+        saveChatHistory()
         do {
             _ = try await request(action: "chat_clear", payload: [:])
         } catch {
             print("Clear chat failed on backend: \(error)")
+        }
+    }
+
+    // MARK: – Chat History Persistence
+
+    func saveChatHistory() {
+        do {
+            let data = try JSONEncoder().encode(chatMessages)
+            try data.write(to: chatHistoryURL, options: .atomic)
+        } catch {
+            print("Failed to save chat history: \(error)")
+        }
+    }
+
+    func loadChatHistory() {
+        let url = chatHistoryURL
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            let messages = try JSONDecoder().decode([ChatMessage].self, from: data)
+            if !messages.isEmpty {
+                chatMessages = messages
+            }
+        } catch {
+            print("Failed to load chat history: \(error)")
         }
     }
 
@@ -431,6 +484,11 @@ final class PythonBridgeService: ObservableObject {
         } catch {
             productivityStatus = "加载失败: \(error.localizedDescription)"
         }
+    }
+
+    /// Public wrapper for new panel views to make arbitrary bridge calls.
+    func rawRequest(action: String, payload: [String: JSONValue]) async throws -> BridgeEnvelope {
+        try await request(action: action, payload: payload)
     }
 
     private func request(action: String, payload: [String: JSONValue]) async throws -> BridgeEnvelope {

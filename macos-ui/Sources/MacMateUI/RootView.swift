@@ -6,6 +6,9 @@ private enum AppSection: String, CaseIterable, Identifiable {
     case calendar = "Calendar"
     case productivity = "Productivity"
     case quadrant = "Quadrant"
+    case scene = "Scene"
+    case music = "Music"
+    case weather = "Weather"
     case plans = "Plans"
     case daily = "Daily"
     case llm = "LLM Settings"
@@ -17,6 +20,7 @@ struct RootView: View {
     @EnvironmentObject private var bridge: PythonBridgeService
     @Environment(\.colorScheme) private var colorScheme
     @State private var selection: AppSection? = .chat
+    @AppStorage("showDebugStatus") private var showDebugStatus = true
 
     var body: some View {
         NavigationSplitView {
@@ -27,6 +31,7 @@ struct RootView: View {
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: icon(for: item))
+                                .frame(width: 20, alignment: .center)
                             Text(item.rawValue)
                                 .font(.custom("Avenir Next", size: 14))
                         }
@@ -54,6 +59,9 @@ struct RootView: View {
                     case .calendar: CalendarPanelView()
                     case .productivity: ProductivityPanelView()
                     case .quadrant: QuadrantPanelView()
+                    case .scene: ScenePanelView()
+                    case .music: MusicPanelView()
+                    case .weather: WeatherPanelView()
                     case .plans: PlansPanelView()
                     case .daily: DailyPanelView()
                     case .llm: LLMSettingsPanelView()
@@ -64,14 +72,19 @@ struct RootView: View {
             }
         }
         .overlay(alignment: .bottomTrailing) {
-            Text(bridge.statusText)
-                .font(.custom("Menlo", size: 11))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
-                .padding(16)
-                .allowsHitTesting(false)
+            if showDebugStatus {
+                Text(bridge.statusText)
+                    .font(.custom("Menlo", size: 11))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Capsule())
+                    .padding(16)
+                    .onTapGesture { showDebugStatus = false }
+            }
+        }
+        .contextMenu {
+            Toggle("Show Debug Status", isOn: $showDebugStatus)
         }
         .onAppear {
             DispatchQueue.main.async {
@@ -101,6 +114,9 @@ struct RootView: View {
         case .calendar: return "calendar"
         case .productivity: return "gauge.with.dots.needle.67percent"
         case .quadrant: return "chart.xyaxis.line"
+        case .scene: return "theatermask.and.paintbrush"
+        case .music: return "music.note"
+        case .weather: return "cloud.sun"
         case .plans: return "target"
         case .daily: return "note.text"
         case .llm: return "slider.horizontal.3"

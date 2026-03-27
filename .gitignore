@@ -1,3 +1,8 @@
+Agent.code-workspace
+.build/
+agent_docx.md
+data/llm_config.json
+
 __pycache__/
 *.pyc
 *.pyo
@@ -8,4 +13,5 @@ venv/
 .env
 .DS_Store
 config.py
+cache/
 *.json

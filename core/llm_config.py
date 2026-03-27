@@ -51,13 +51,30 @@ class LLMConfigStore:
         if cfg.get("mode") not in ("api", "ollama"):
             cfg["mode"] = "api"
 
+        cfg["api_url"] = self._normalize_api_url(cfg.get("api_url", ""))
         return cfg
+
+    @staticmethod
+    def _normalize_api_url(url: str) -> str:
+        """Auto-append /v1/chat/completions if the user only provided a base URL."""
+        url = (url or "").strip().rstrip("/")
+        if not url:
+            return ""
+        if url.endswith("/chat/completions"):
+            return url
+        if url.endswith("/v1"):
+            return url + "/chat/completions"
+        # Bare domain like https://hk.linkapi.ai
+        if not url.endswith("/v1/chat/completions"):
+            return url + "/v1/chat/completions"
+        return url
 
     def save(self, cfg: Dict[str, str]) -> Dict[str, str]:
         normalized = self.default_config()
         normalized.update({k: str(v) for k, v in cfg.items() if v is not None})
         if normalized.get("mode") not in ("api", "ollama"):
             normalized["mode"] = "api"
+        normalized["api_url"] = self._normalize_api_url(normalized.get("api_url", ""))
 
         with open(self.file_path, "w", encoding="utf-8") as f:
             json.dump(normalized, f, ensure_ascii=False, indent=2)
