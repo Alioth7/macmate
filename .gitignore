@@ -2,6 +2,8 @@ Agent.code-workspace
 .build/
 agent_docx.md
 data/llm_config.json
+dist/
+macos-ui/.build/
 
 __pycache__/
 *.pyc

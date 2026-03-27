@@ -41,17 +41,28 @@ final class PythonBridgeService: ObservableObject {
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
 
+    /// Whether running from inside a .app bundle
+    private var isBundledApp: Bool {
+        Bundle.main.bundlePath.hasSuffix(".app")
+    }
+
     func startBridgeProcessIfNeeded() {
         guard process == nil else { return }
         loadChatHistory()
 
         let bridgePath = resolveBridgePath()
-        let pythonExec = ProcessInfo.processInfo.environment["MACMATE_PYTHON"] ?? "python3"
-
         let proc = Process()
-        // 使用 zsh -l (login shell) 启动，这样能自动加载你的 ~/.zshrc (包含 Conda 环境变量等)
-        proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        proc.arguments = ["-l", "-c", "exec \(pythonExec) -u \"\(bridgePath)\""]
+
+        if isBundledApp {
+            // .app bundle mode: execute PyInstaller binary directly
+            proc.executableURL = URL(fileURLWithPath: bridgePath)
+            proc.arguments = []
+        } else {
+            // Development mode: use python3 via login shell
+            let pythonExec = ProcessInfo.processInfo.environment["MACMATE_PYTHON"] ?? "python3"
+            proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            proc.arguments = ["-l", "-c", "exec \(pythonExec) -u \"\(bridgePath)\""]
+        }
         proc.currentDirectoryURL = URL(fileURLWithPath: repositoryRoot())
 
         let inPipe = Pipe()
@@ -543,6 +554,11 @@ final class PythonBridgeService: ObservableObject {
     }
 
     private func repositoryRoot() -> String {
+        // .app bundle: use Resources/ directory
+        if isBundledApp, let resourcePath = Bundle.main.resourcePath {
+            return resourcePath
+        }
+        // Development: resolve from CWD
         let cwd = FileManager.default.currentDirectoryPath
         if cwd.hasSuffix("/macos-ui") {
             return URL(fileURLWithPath: cwd).deletingLastPathComponent().path
@@ -551,10 +567,20 @@ final class PythonBridgeService: ObservableObject {
     }
 
     private func resolveBridgePath() -> String {
+        // 1. Environment override
         if let envPath = ProcessInfo.processInfo.environment["MACMATE_BRIDGE_PATH"], !envPath.isEmpty {
             return envPath
         }
 
+        // 2. .app bundle: look for PyInstaller binary in Resources/
+        if isBundledApp, let resourcePath = Bundle.main.resourcePath {
+            let bundledBinary = resourcePath + "/MacMateBridge/MacMateBridge"
+            if FileManager.default.isExecutableFile(atPath: bundledBinary) {
+                return bundledBinary
+            }
+        }
+
+        // 3. Development: use bridge_server.py
         let root = repositoryRoot()
         return root + "/bridge_server.py"
     }
