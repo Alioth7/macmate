@@ -71,6 +71,9 @@ class WeatherService:
     # Internal
     # ------------------------------------------------------------------
     def _fetch_weather(self, query: str) -> Dict:
+        return self._fetch_full_weather(query, full=False)
+
+    def _fetch_full_weather(self, query: str, full: bool = True) -> Dict:
         try:
             url = self.WTTR_URL.format(query=query)
             resp = requests.get(url, timeout=self.TIMEOUT)
@@ -93,7 +96,7 @@ class WeatherService:
                 desc_list = current.get("weatherDesc", [])
                 desc_zh = desc_list[0].get("value", "") if desc_list else ""
 
-            return {
+            result = {
                 "city": city_name or query,
                 "temp_c": current.get("temp_C", ""),
                 "feels_like_c": current.get("FeelsLikeC", ""),
@@ -103,6 +106,53 @@ class WeatherService:
                 "wind_dir": current.get("winddir16Point", ""),
                 "observation_time": current.get("observation_time", ""),
             }
+
+            if not full:
+                return result
+
+            # Hourly data for today
+            hourly = []
+            weather_days = raw.get("weather", [])
+            if weather_days:
+                today = weather_days[0]
+                for h in today.get("hourly", []):
+                    hour_val = int(h.get("time", "0")) // 100
+                    h_desc = ""
+                    h_lang = h.get("lang_zh", [])
+                    if h_lang:
+                        h_desc = h_lang[0].get("value", "")
+                    if not h_desc:
+                        h_desc_list = h.get("weatherDesc", [])
+                        h_desc = h_desc_list[0].get("value", "") if h_desc_list else ""
+                    hourly.append({
+                        "hour": f"{hour_val:02d}:00",
+                        "temp_c": h.get("tempC", ""),
+                        "feels_like_c": h.get("FeelsLikeC", ""),
+                        "description": h_desc,
+                        "humidity": h.get("humidity", ""),
+                        "chance_of_rain": h.get("chanceofrain", "0"),
+                        "wind_kmh": h.get("windspeedKmph", ""),
+                    })
+            result["hourly"] = hourly
+
+            # 3-day forecast
+            forecast = []
+            for day in weather_days:
+                date_str = day.get("date", "")
+                astro = day.get("astronomy", [{}])[0] if day.get("astronomy") else {}
+                forecast.append({
+                    "date": date_str,
+                    "max_c": day.get("maxtempC", ""),
+                    "min_c": day.get("mintempC", ""),
+                    "avg_c": day.get("avgtempC", ""),
+                    "sunrise": astro.get("sunrise", ""),
+                    "sunset": astro.get("sunset", ""),
+                    "total_snow_cm": day.get("totalSnow_cm", "0"),
+                    "uv_index": day.get("uvIndex", ""),
+                })
+            result["forecast"] = forecast
+
+            return result
         except requests.RequestException as exc:
             return {"error": f"network error: {exc}"}
         except Exception as exc:

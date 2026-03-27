@@ -46,22 +46,28 @@ class SystemMonitor:
         "Read current system health. Returns JSON string with CPU load, RAM usage, disk usage, temperature and top processes. No args.",
     )
     def get_system_health_tool(self) -> str:
-        snapshot = self.collect_snapshot()
-        return json.dumps(snapshot, ensure_ascii=False, indent=2)
+        try:
+            snapshot = self.collect_snapshot()
+            return json.dumps(snapshot, ensure_ascii=False, indent=2)
+        except Exception as e:
+            return json.dumps({"error": f"Failed to collect system health: {e}"}, ensure_ascii=False)
 
     @registry.register(
         "check_system_risks",
         "Detect risky system state (memory pressure, disk full, process spike). Returns JSON alerts. No args.",
     )
     def check_system_risks_tool(self) -> str:
-        snapshot = self.collect_snapshot()
-        alerts = self._detect_alerts(snapshot)
-        result = {
-            "time": snapshot.get("time"),
-            "alerts": alerts,
-            "summary": "normal" if not alerts else f"{len(alerts)} risk(s) detected",
-        }
-        return json.dumps(result, ensure_ascii=False, indent=2)
+        try:
+            snapshot = self.collect_snapshot()
+            alerts = self._detect_alerts(snapshot)
+            result = {
+                "time": snapshot.get("time"),
+                "alerts": alerts,
+                "summary": "normal" if not alerts else f"{len(alerts)} risk(s) detected",
+            }
+            return json.dumps(result, ensure_ascii=False, indent=2)
+        except Exception as e:
+            return json.dumps({"error": f"Failed to check risks: {e}"}, ensure_ascii=False)
 
     @registry.register(
         "sample_activity_usage",
@@ -110,11 +116,30 @@ class SystemMonitor:
     def collect_snapshot(self) -> Dict:
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        disk = self._disk_usage()
-        memory = self._memory_usage()
-        cpu = self._cpu_load()
-        temperature = self._cpu_temperature()
-        top_processes = self._top_processes(limit=8)
+        try:
+            disk = self._disk_usage()
+        except Exception as e:
+            disk = {"error": str(e)}
+
+        try:
+            memory = self._memory_usage()
+        except Exception as e:
+            memory = {"error": str(e)}
+
+        try:
+            cpu = self._cpu_load()
+        except Exception as e:
+            cpu = {"error": str(e)}
+
+        try:
+            temperature = self._cpu_temperature()
+        except Exception as e:
+            temperature = {"error": str(e)}
+
+        try:
+            top_processes = self._top_processes(limit=8)
+        except Exception as e:
+            top_processes = [{"error": str(e)}]
 
         return {
             "time": now,

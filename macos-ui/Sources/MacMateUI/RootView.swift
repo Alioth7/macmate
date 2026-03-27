@@ -2,18 +2,24 @@ import SwiftUI
 import AppKit
 
 private enum AppSection: String, CaseIterable, Identifiable {
-    case chat = "Chat"
-    case calendar = "Calendar"
-    case productivity = "Productivity"
-    case quadrant = "Quadrant"
-    case scene = "Scene"
-    case music = "Music"
-    case weather = "Weather"
-    case plans = "Plans"
-    case daily = "Daily"
-    case llm = "LLM Settings"
+    case chat, calendar, productivity, quadrant, scene, music, weather, plans, daily, llm
 
     var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .chat:         return L10n.s(.chat)
+        case .calendar:     return L10n.s(.calendar)
+        case .productivity: return L10n.s(.productivity)
+        case .quadrant:     return L10n.s(.quadrant)
+        case .scene:        return L10n.s(.scene)
+        case .music:        return L10n.s(.music)
+        case .weather:      return L10n.s(.weather)
+        case .plans:        return L10n.s(.plans)
+        case .daily:        return L10n.s(.daily)
+        case .llm:          return L10n.s(.llmSettings)
+        }
+    }
 }
 
 struct RootView: View {
@@ -21,6 +27,7 @@ struct RootView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var selection: AppSection? = .chat
     @AppStorage("showDebugStatus") private var showDebugStatus = true
+    @AppStorage("appLanguage") private var appLanguage = "zh"
 
     var body: some View {
         NavigationSplitView {
@@ -32,7 +39,7 @@ struct RootView: View {
                         HStack(spacing: 10) {
                             Image(systemName: icon(for: item))
                                 .frame(width: 20, alignment: .center)
-                            Text(item.rawValue)
+                            Text(item.label)
                                 .font(.custom("Avenir Next", size: 14))
                         }
                         .padding(.vertical, 6)
@@ -44,6 +51,16 @@ struct RootView: View {
                 }
             }
             .navigationTitle("MacMate")
+            .safeAreaInset(edge: .bottom) {
+                Picker("", selection: $appLanguage) {
+                    ForEach(Lang.allCases, id: \.rawValue) { lang in
+                        Text(lang.displayName).tag(lang.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
         } detail: {
             ZStack {
                 LinearGradient(
@@ -84,7 +101,7 @@ struct RootView: View {
             }
         }
         .contextMenu {
-            Toggle("Show Debug Status", isOn: $showDebugStatus)
+            Toggle(L10n.s(.showDebugStatus), isOn: $showDebugStatus)
         }
         .onAppear {
             DispatchQueue.main.async {

@@ -5,7 +5,7 @@ import SwiftUI
 struct ChatInputField: View {
     @Binding var text: String
     var isDisabled: Bool
-    var placeholder: String = "Enter发送，Shift+Enter换行"
+    var placeholder: String = L10n.s(.chatPlaceholder)
     var onSubmit: () -> Void
 
     var body: some View {

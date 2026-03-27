@@ -46,10 +46,23 @@ class ToolRegistry:
         instance = self.bound_instances.get(name)
         
         if instance:
-            # 返回一个闭包，手动传入 self
+            # Return a closure that manually passes self
             def bound_wrapper(*args, **kwargs):
                 return tool(instance, *args, **kwargs)
             return bound_wrapper
+        
+        # Check if this is an instance method (first param is 'self') but no instance was bound
+        sig = inspect.signature(tool)
+        params = list(sig.parameters.keys())
+        if params and params[0] == 'self':
+            # Instance method without bound instance — service failed to init
+            def error_wrapper(*args, **kwargs):
+                return (
+                    f"Error: Tool '{name}' is registered but its service is not initialized. "
+                    f"The required system component may be unavailable or failed to start. "
+                    f"Please check the application logs or system permissions."
+                )
+            return error_wrapper
         
         return tool
 

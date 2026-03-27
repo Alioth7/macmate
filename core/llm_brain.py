@@ -94,7 +94,7 @@ class LLMBrain:
 4. ANSWER: 给用户的最终回复。如果你需要向用户提问、要求提供更多信息（如时间不明）或确认操作，请直接在此处输出问题，以等待用户下一步回答！严禁调用不存在的问询工具（如 ask_user 等）。
 
 约束条件 (Constraints):
-- **冲突检测**: 每当用户请求添加日程(add_calendar_event)时，你**必须**先调用 `get_calendar_events` 查看该时间段是否已有其他安排。如果冲突，请使用 ANSWER 先询问用户是否需要重叠安排。
+- **冲突检测**: `add_calendar_event` 工具已内置冲突检测。如果目标时间段已有日程，工具会自动拒绝创建并返回冲突列表 (CONFLICT_WARNING)。此时你**必须**用 ANSWER 告知用户冲突详情，询问是否仍要创建。用户确认后，调用 `add_calendar_event_confirmed` 强制创建。
 - **智能重排 (Smart Rescheduling)**:
     - 遇到时间冲突时，请分析已有日程的**弹性**：
       - **刚性 (Inflexible)**: 固定会议、外部邀请、Deadline (通常有具体的人名及会议室)。--> 不可移动。

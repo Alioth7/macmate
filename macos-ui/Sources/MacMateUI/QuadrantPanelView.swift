@@ -3,25 +3,26 @@ import Charts
 
 struct QuadrantPanelView: View {
     @EnvironmentObject private var bridge: PythonBridgeService
+    @AppStorage("appLanguage") private var lang = "zh"
     @State private var isLoading = false
     @State private var showList = false
     @State private var errorMessage = ""
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Eisenhower Matrix")
+            Text(L10n.s(.eisenhowerMatrix))
                 .font(.custom("Avenir Next Demi Bold", size: 28))
                 
             HStack {
-                Button("分析7天日程") {
+                Button(L10n.s(.analyze7Days)) {
                     fetchData(period: "7days")
                 }.disabled(isLoading)
                 
-                Button("分析近期日程(今日至明早)") {
+                Button(L10n.s(.analyzeToday)) {
                     fetchData(period: "today")
                 }.disabled(isLoading)
                 
-                Toggle("显示详细列表", isOn: $showList)
+                Toggle(L10n.s(.showDetailList), isOn: $showList)
                     .toggleStyle(.switch)
                     .padding(.leading, 10)
                 
@@ -36,14 +37,14 @@ struct QuadrantPanelView: View {
                     Text(errorMessage)
                         .foregroundColor(.orange)
                         .font(.custom("Avenir Next", size: 13))
-                    Text("提示: 请确保LLM已配置，并在「系统设置 → 隐私与安全 → 日历」中授权。")
+                    Text(L10n.s(.quadrantHint))
                         .foregroundStyle(.secondary)
                         .font(.caption)
                 }
             }
             
             if bridge.quadrantItems.isEmpty && errorMessage.isEmpty {
-                Text("暂无数据，请点击上方按钮进行AI分析。")
+                Text(L10n.s(.noQuadrantData))
                     .foregroundStyle(.secondary)
                 Spacer()
             } else {

@@ -5,25 +5,39 @@ LastEditors: LiangSiyuan
 LastEditTime: 2026-03-02 00:01:30
 FilePath: /Agent/tool/calendar_adapter.py
 '''
-import EventKit
-from Foundation import NSDate, NSTimeZone
 import datetime
 import time
-from core.interfaces import CalendarController
-from core.tools import registry  # 引入工具注册表
+from core.tools import registry
+
+# Soft-import EventKit so tool decorators always register
+_eventkit_available = False
+try:
+    import EventKit
+    from Foundation import NSDate, NSTimeZone
+    _eventkit_available = True
+except Exception:
+    EventKit = None  # type: ignore
+    NSDate = None    # type: ignore
+    NSTimeZone = None  # type: ignore
+
+try:
+    from core.interfaces import CalendarController
+except Exception:
+    CalendarController = object  # type: ignore
 
 class MacCalendarAdapter(CalendarController):
     def __init__(self):
+        if not _eventkit_available:
+            raise RuntimeError("EventKit/PyObjC not installed. Calendar features unavailable.")
         self.store = EventKit.EKEventStore.alloc().init()
         # 绑定工具实例到注册表
         registry.bind_instance(self)
         self._ensure_permission()
 
-    @registry.register("add_calendar_event", "Create a new calendar event. Args: title(str), start_time(str 'YYYY-MM-DD HH:MM'), end_time(str 'YYYY-MM-DD HH:MM'), notes(str)")
+    @registry.register("add_calendar_event", "Create a new calendar event with automatic conflict detection. Args: title(str), start_time(str 'YYYY-MM-DD HH:MM'), end_time(str 'YYYY-MM-DD HH:MM'), notes(str). If there are conflicting events, this tool will NOT create the event and instead return the conflicts. You must then ask the user and call add_calendar_event_confirmed to force-create.")
     def add_event_tool(self, title: str, start_time: str, end_time: str, notes: str = "") -> str:
-        """注册为工具，接受字符串时间"""
+        """Create event with conflict check. Returns conflict warning if overlapping events exist."""
         try:
-            # 兼容有些时候 LLM 可能输出秒
             fmt = "%Y-%m-%d %H:%M"
             if len(start_time.split(':')) == 3:
                 start_time = start_time.rsplit(':', 1)[0]
@@ -33,40 +47,86 @@ class MacCalendarAdapter(CalendarController):
             dt_start = datetime.datetime.strptime(start_time, fmt)
             dt_end = datetime.datetime.strptime(end_time, fmt)
 
-            # --- 时间检查逻辑 ---
+            # --- Time validation ---
             now = datetime.datetime.now()
-            # 允许 5 分钟的误差（考虑思考时间）
             if dt_start < now - datetime.timedelta(minutes=5):
                 return f"Error: Cannot schedule event in the past (Start time {start_time} is earlier than Now {now.strftime('%Y-%m-%d %H:%M')}). Please check the date."
 
             if dt_end <= dt_start:
                 return f"Error: End time ({end_time}) must be later than Start time ({start_time})."
-            # ------------------
 
-            event = EventKit.EKEvent.eventWithEventStore_(self.store)
-            event.setTitle_(title)
-            event.setStartDate_(self._datetime_to_nsdate(dt_start))
-            event.setEndDate_(self._datetime_to_nsdate(dt_end))
-            event.setNotes_(notes)
+            # --- Conflict detection ---
+            ns_start = self._datetime_to_nsdate(dt_start)
+            ns_end = self._datetime_to_nsdate(dt_end)
+            predicate = self.store.predicateForEventsWithStartDate_endDate_calendars_(
+                ns_start, ns_end, None
+            )
+            existing = self.store.eventsMatchingPredicate_(predicate)
             
-            # 统一设置为 Asia/Shanghai，避免 UTC 问题
-            ns_tz = NSTimeZone.timeZoneWithName_("Asia/Shanghai")
-            event.setTimeZone_(ns_tz)
-            
-            # 复用普通方法逻辑...
-            default_calendar = self.store.defaultCalendarForNewEvents()
-            if not default_calendar:
-                return "Error: No default calendar found."
-            event.setCalendar_(default_calendar)
-            
-            success, error = self.store.saveEvent_span_error_(event, 0, None)
-            
-            if success:
-                return f"Success: Event '{title}' added on {start_time}."
-            else:
-                return f"Error: Failed to save event. {error}"
+            if existing and len(existing) > 0:
+                conflicts = []
+                for ev in existing:
+                    s_ts = ev.startDate().timeIntervalSince1970()
+                    e_ts = ev.endDate().timeIntervalSince1970()
+                    ev_start = datetime.datetime.fromtimestamp(s_ts).strftime('%H:%M')
+                    ev_end = datetime.datetime.fromtimestamp(e_ts).strftime('%H:%M')
+                    conflicts.append(f"  - '{ev.title()}' ({ev_start} ~ {ev_end})")
+                
+                conflict_list = "\n".join(conflicts)
+                return (
+                    f"CONFLICT_WARNING: The time slot {start_time} ~ {end_time} already has {len(existing)} event(s):\n"
+                    f"{conflict_list}\n"
+                    f"The event '{title}' was NOT created. Please ask the user whether to proceed. "
+                    f"If the user confirms, call add_calendar_event_confirmed with the same arguments to force-create."
+                )
+
+            # No conflicts — create directly
+            return self._do_create_event(title, dt_start, dt_end, notes, start_time)
+
         except Exception as e:
             return f"Exception during add_event_tool: {str(e)}"
+
+    @registry.register("add_calendar_event_confirmed", "Force-create a calendar event (skip conflict check). Use ONLY after user has confirmed they want to create despite conflicts. Args: title(str), start_time(str 'YYYY-MM-DD HH:MM'), end_time(str 'YYYY-MM-DD HH:MM'), notes(str)")
+    def add_event_confirmed_tool(self, title: str, start_time: str, end_time: str, notes: str = "") -> str:
+        """Create event without conflict check — user already confirmed."""
+        try:
+            fmt = "%Y-%m-%d %H:%M"
+            if len(start_time.split(':')) == 3:
+                start_time = start_time.rsplit(':', 1)[0]
+            if len(end_time.split(':')) == 3:
+                end_time = end_time.rsplit(':', 1)[0]
+            dt_start = datetime.datetime.strptime(start_time, fmt)
+            dt_end = datetime.datetime.strptime(end_time, fmt)
+
+            if dt_end <= dt_start:
+                return f"Error: End time ({end_time}) must be later than Start time ({start_time})."
+
+            return self._do_create_event(title, dt_start, dt_end, notes, start_time)
+        except Exception as e:
+            return f"Exception during add_event_confirmed_tool: {str(e)}"
+
+    def _do_create_event(self, title: str, dt_start, dt_end, notes: str, start_time_str: str) -> str:
+        """Internal: actually create the EKEvent."""
+        event = EventKit.EKEvent.eventWithEventStore_(self.store)
+        event.setTitle_(title)
+        event.setStartDate_(self._datetime_to_nsdate(dt_start))
+        event.setEndDate_(self._datetime_to_nsdate(dt_end))
+        event.setNotes_(notes)
+        
+        ns_tz = NSTimeZone.timeZoneWithName_("Asia/Shanghai")
+        event.setTimeZone_(ns_tz)
+        
+        default_calendar = self.store.defaultCalendarForNewEvents()
+        if not default_calendar:
+            return "Error: No default calendar found."
+        event.setCalendar_(default_calendar)
+        
+        success, error = self.store.saveEvent_span_error_(event, 0, None)
+        
+        if success:
+            return f"Success: Event '{title}' added on {start_time_str}."
+        else:
+            return f"Error: Failed to save event. {error}"
 
     @registry.register("delete_calendar_event", "Delete user's calendar event. Args: title(str), start_time(str 'YYYY-MM-DD HH:MM'), end_time(str 'YYYY-MM-DD HH:MM')")
     def delete_event_tool(self, title: str, start_time: str, end_time: str) -> str:

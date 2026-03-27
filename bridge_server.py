@@ -21,10 +21,7 @@ try:
 except Exception:
     LLMBrain = None
 
-try:
-    from tool.calendar_adapter import MacCalendarAdapter
-except Exception:
-    MacCalendarAdapter = None
+from tool.calendar_adapter import MacCalendarAdapter
 
 
 class BridgeRuntime:
@@ -179,15 +176,43 @@ class BridgeRuntime:
             return {"logs": self.memory.get_logs_data()}
 
         if action == "daily_ai_draft":
-            if self.brain is None or self.adapter is None:
-                return {"error": "LLM or Calendar unavailable."}
-            
+            if self.brain is None:
+                return {"summary": "[错误] LLM 未配置，请先在 LLM Settings 中配置 API 或 Ollama。", "suggestion": ""}
+
             now = datetime.now()
-            start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0).strftime("%Y-%m-%d %H:%M")
-            end_of_day = now.replace(hour=23, minute=59, second=59, microsecond=0).strftime("%Y-%m-%d %H:%M")
-            events = self.adapter.get_detailed_events(start_of_day, end_of_day)
-            event_text = json.dumps(events, ensure_ascii=False) if events else "今天没有日历事件。"
-            
+
+            # 1. Calendar events (optional — works even without calendar)
+            event_text = "日历不可用或未授权。"
+            if self.adapter is not None:
+                try:
+                    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0).strftime("%Y-%m-%d %H:%M")
+                    end_of_day = now.replace(hour=23, minute=59, second=59, microsecond=0).strftime("%Y-%m-%d %H:%M")
+                    events = self.adapter.get_detailed_events(start_of_day, end_of_day)
+                    event_text = json.dumps(events, ensure_ascii=False) if events else "今天没有日历事件。"
+                except Exception:
+                    event_text = "读取日历时出错。"
+
+            # 2. Productivity / app usage data
+            productivity_text = "无应用使用数据。"
+            try:
+                usage = self.monitor.get_usage_summary(days=1)
+                lines = []
+                lines.append(f"总追踪时长: {usage.get('total_tracked_hours', 0)}h")
+                lines.append(f"专注时长: {usage.get('focus_hours', 0)}h")
+                lines.append(f"分心时长: {usage.get('distraction_hours', 0)}h")
+                top_apps = usage.get("top_apps", [])
+                if top_apps:
+                    lines.append("前台应用 TOP:")
+                    for app_item in top_apps[:8]:
+                        if isinstance(app_item, dict):
+                            lines.append(f"  - {app_item.get('app', '?')}: {app_item.get('hours', 0)}h")
+                        elif isinstance(app_item, (list, tuple)) and len(app_item) >= 2:
+                            lines.append(f"  - {app_item[0]}: {round(app_item[1]/3600, 2)}h")
+                productivity_text = "\n".join(lines)
+            except Exception:
+                pass
+
+            # 3. Plans context
             plans_context = ""
             raw_plans = self.memory.get_plans_data()
             for p in raw_plans:
@@ -195,18 +220,26 @@ class BridgeRuntime:
                     plans_context += f"- 目标: {p['content']}\n"
                     if p.get("custom_prompt"):
                         plans_context += f"  > 上下文/指导原则: {p['custom_prompt']}\n"
-                        
-            prompt = f"""请根据今天的日程和我的长期目标，为我生成一份每日总结和改进建议。
-【长期目标与指导原则】
-{plans_context}
-【今日日程】
+
+            prompt = f"""请根据以下信息为我生成一份每日总结和改进建议。
+
+【今日日历日程】
 {event_text}
+
+【今日应用使用 / 生产力数据】
+{productivity_text}
+
+【长期目标与指导原则】
+{plans_context if plans_context else '暂无设定。'}
+
 【要求】
-1. 总结今日完成情况，计算时间利用率（如果数据允许）。
-2. 结合我的长期目标（特别是指导原则）进行点评。
-3. 使用分隔符 "### 改进建议" 将总结和建议分开。"""
+1. 总结今日日历安排和应用使用情况。
+2. 分析专注与分心时间比例，结合长期目标点评。
+3. 使用分隔符 "### 改进建议" 将总结和建议分开。
+4. 禁止使用任何 emoji 表情符号，只用纯文字。
+5. 语言简洁客观。"""
             try:
-                response = self.brain.generate_text(prompt, system_instruction="你是一个高效的个人成长助手。请客观、犀利地分析日报。")
+                response = self.brain.generate_text(prompt, system_instruction="你是一个高效的个人成长助手。请客观、犀利地分析日报。禁止使用任何emoji。")
                 if "### 改进建议" in response:
                     parts = response.split("### 改进建议")
                     summary = parts[0].strip()
@@ -216,7 +249,7 @@ class BridgeRuntime:
                     suggestion = "请根据总结自行补充。"
                 return {"summary": summary, "suggestion": suggestion}
             except Exception as e:
-                return {"error": str(e)}
+                return {"summary": f"[生成失败] {e}", "suggestion": ""}
 
         if action == "quadrant_analysis":
             if self.brain is None or self.adapter is None:
@@ -323,7 +356,10 @@ class BridgeRuntime:
 
         if action == "weather":
             city = payload.get("city", "")
-            return {"result": self.weather_service.get_current_weather_tool(city=city)}
+            if not city:
+                city = self.weather_service._auto_locate_city() or "Wuhan"
+            data = self.weather_service._fetch_full_weather(city, full=True)
+            return {"weather": data}
 
         if action == "llm_config_get":
             cfg = self.llm_config_store.load()

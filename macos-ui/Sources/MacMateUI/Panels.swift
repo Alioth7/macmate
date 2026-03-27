@@ -4,6 +4,7 @@ import Charts
 struct ChatPanelView: View {
     @EnvironmentObject private var bridge: PythonBridgeService
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("appLanguage") private var lang = "zh"
     @State private var inputText = ""
     @State private var isStepsExpanded = true
     @State private var isThinking = false
@@ -12,7 +13,7 @@ struct ChatPanelView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Agent Chat")
+                Text(L10n.s(.agentChat))
                     .font(.custom("Avenir Next Demi Bold", size: 28))
 
                 if !toastMessage.isEmpty {
@@ -25,21 +26,21 @@ struct ChatPanelView: View {
                 Spacer()
                 Button(action: {
                     bridge.loadChatHistory()
-                    showToast("✅ 已加载")
+                    showToast(L10n.s(.loaded))
                 }) {
                     Image(systemName: "arrow.down.doc")
                 }
                 .buttonStyle(.plain)
-                .help("加载最近聊天记录")
+                .help(L10n.s(.loadHistory))
 
                 Button(action: {
                     bridge.saveChatHistory()
-                    showToast("✅ 已保存")
+                    showToast(L10n.s(.saved))
                 }) {
                     Image(systemName: "square.and.arrow.down")
                 }
                 .buttonStyle(.plain)
-                .help("保存聊天记录")
+                .help(L10n.s(.saveHistory))
 
                 Button(action: {
                     Task { await bridge.clearChat() }
@@ -48,7 +49,7 @@ struct ChatPanelView: View {
                         .foregroundColor(.red)
                 }
                 .buttonStyle(.plain)
-                .help("清空当前对话上下文")
+                .help(L10n.s(.clearChat))
                 .disabled(isThinking)
             }
 
@@ -66,10 +67,19 @@ struct ChatPanelView: View {
                         }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
+
+                    // Quick-reply buttons for the last assistant message
+                    if !isThinking, let lastMsg = bridge.chatMessages.last, lastMsg.role == "assistant" {
+                        let options = Self.extractOptions(from: lastMsg.content)
+                        if !options.isEmpty {
+                            quickReplyButtons(options: options)
+                        }
+                    }
+
                     if isThinking {
                         HStack {
                             ProgressView().controlSize(.small)
-                            Text("Agent 正在思考并执行工具...").font(.caption).foregroundColor(.secondary)
+                            Text(L10n.s(.agentThinking)).font(.caption).foregroundColor(.secondary)
                             Spacer()
                         }
                     }
@@ -81,7 +91,7 @@ struct ChatPanelView: View {
             .animation(.easeOut(duration: 0.24), value: bridge.chatMessages.count)
 
             if !bridge.latestTrace.isEmpty {
-                DisclosureGroup("Agent Steps (思考与执行过程)", isExpanded: $isStepsExpanded) {
+                DisclosureGroup(L10n.s(.agentSteps), isExpanded: $isStepsExpanded) {
                     ScrollView(showsIndicators: true) {
                         VStack(alignment: .leading, spacing: 4) {
                             ForEach(Array(bridge.latestTrace.enumerated()), id: \.offset) { index, line in
@@ -104,7 +114,7 @@ struct ChatPanelView: View {
                     sendMessage()
                 }
 
-                Button("Send") {
+                Button(L10n.s(.send)) {
                     sendMessage()
                 }
                 .buttonStyle(.borderedProminent)
@@ -132,12 +142,20 @@ struct ChatPanelView: View {
         }
     }
 
+
     private func bubble(text: String, tint: Color) -> some View {
-        Text(text)
-            .font(.custom("Avenir Next", size: 14))
-            .padding(12)
-            .background(tint)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        Group {
+            if let attributed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+                Text(attributed)
+            } else {
+                Text(text)
+            }
+        }
+        .font(.custom("Avenir Next", size: 14))
+        .textSelection(.enabled)
+        .padding(12)
+        .background(tint)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private var assistantBubbleColor: Color {
@@ -151,28 +169,120 @@ struct ChatPanelView: View {
             ? Color(red: 0.34, green: 0.24, blue: 0.16)
             : Color(red: 1.0, green: 0.90, blue: 0.78)
     }
+
+    // MARK: - Quick Reply Options
+
+    /// Extract numbered/bulleted options from assistant text
+    static func extractOptions(from text: String) -> [String] {
+        let lines = text.components(separatedBy: .newlines)
+        var options: [String] = []
+        // Match patterns: "1. xxx", "1) xxx", "1、xxx", "- xxx", "• xxx"
+        let pattern = #"^\s*(?:\d+[\.\)、]|[-•])\s*(.+)$"#
+        let regex = try? NSRegularExpression(pattern: pattern)
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            let range = NSRange(trimmed.startIndex..., in: trimmed)
+            if let match = regex?.firstMatch(in: trimmed, range: range),
+               let captureRange = Range(match.range(at: 1), in: trimmed) {
+                let optionText = String(trimmed[captureRange]).trimmingCharacters(in: .whitespaces)
+                // Skip overly long lines (likely explanatory, not an option)
+                if optionText.count <= 60 && !optionText.isEmpty {
+                    options.append(optionText)
+                }
+            }
+        }
+        // Only show buttons if there are 2~6 options (avoids false positives)
+        return (options.count >= 2 && options.count <= 6) ? options : []
+    }
+
+    private func quickReplyButtons(options: [String]) -> some View {
+        FlowLayout(spacing: 8) {
+            ForEach(options, id: \.self) { option in
+                Button {
+                    inputText = option
+                    sendMessage()
+                } label: {
+                    Text(option)
+                        .font(.custom("Avenir Next", size: 13))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(Color.accentColor.opacity(0.12))
+                        .foregroundColor(.accentColor)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(Color.accentColor.opacity(0.3), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.leading, 4)
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+    }
+}
+
+/// Simple flow layout for wrapping buttons
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let result = arrange(proposal: proposal, subviews: subviews)
+        return result.size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = arrange(proposal: proposal, subviews: subviews)
+        for (index, position) in result.positions.enumerated() {
+            subviews[index].place(at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y), proposal: .unspecified)
+        }
+    }
+
+    private func arrange(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, positions: [CGPoint]) {
+        let maxWidth = proposal.width ?? .infinity
+        var positions: [CGPoint] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var maxX: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > maxWidth && x > 0 {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            positions.append(CGPoint(x: x, y: y))
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + spacing
+            maxX = max(maxX, x)
+        }
+
+        return (CGSize(width: maxX, height: y + rowHeight), positions)
+    }
 }
 
 struct CalendarPanelView: View {
     @EnvironmentObject private var bridge: PythonBridgeService
+    @AppStorage("appLanguage") private var lang = "zh"
     @State private var viewMode: Int = 1 // 0: Today, 1: Upcoming 7 Days
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Calendar")
+                Text(L10n.s(.calendar))
                     .font(.custom("Avenir Next Demi Bold", size: 28))
                 
                 Picker("", selection: $viewMode) {
-                    Text("Day View (Today)").tag(0)
-                    Text("Week View (7 Days Gantt)").tag(1)
+                    Text(L10n.s(.dayView)).tag(0)
+                    Text(L10n.s(.weekView)).tag(1)
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 320)
                 .padding(.leading, 12)
 
                 Spacer()
-                Button("Refresh") {
+                Button(L10n.s(.refresh)) {
                     Task { await bridge.loadCalendar() }
                 }
                 .buttonStyle(.bordered)
@@ -180,9 +290,9 @@ struct CalendarPanelView: View {
 
             if bridge.calendarPermissionDenied {
                 HStack(spacing: 12) {
-                    Text("日历权限被拒绝，请在系统设置中允许 MacMate 访问日历。")
+                    Text(L10n.s(.calendarDenied))
                         .foregroundStyle(.secondary)
-                    Button("Open Settings") {
+                    Button(L10n.s(.openSettings)) {
                         NativeCalendarService.openCalendarPrivacySettings()
                     }
                     .buttonStyle(.borderedProminent)
@@ -326,29 +436,30 @@ struct CalendarPanelView: View {
 
 struct PlansPanelView: View {
     @EnvironmentObject private var bridge: PythonBridgeService
+    @AppStorage("appLanguage") private var lang = "zh"
     @State private var planText = ""
     @State private var planPrompt = ""
     @State private var targetDate = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Long-term Plans")
+            Text(L10n.s(.longTermPlans))
                 .font(.custom("Avenir Next Demi Bold", size: 28))
 
             VStack(spacing: 8) {
                 HStack {
-                    TextField("目标内容（例如：学习 Python 进阶）", text: $planText)
+                    TextField(L10n.s(.planContentHint), text: $planText)
                         .textFieldStyle(.roundedBorder)
-                    TextField("目标日期 YYYY-MM-DD", text: $targetDate)
+                    TextField(L10n.s(.planDateHint), text: $targetDate)
                         .textFieldStyle(.roundedBorder)
                         .font(.custom("Menlo", size: 13))
                         .frame(width: 160)
                 }
                 HStack {
-                    TextField("指导原则 / Prompt（如：时刻提醒我要保持代码简洁）", text: $planPrompt)
+                    TextField(L10n.s(.planPromptHint), text: $planPrompt)
                         .textFieldStyle(.roundedBorder)
 
-                    Button("Add Plan") {
+                    Button(L10n.s(.addPlan)) {
                         let content = planText.trimmingCharacters(in: .whitespacesAndNewlines)
                         let prompt = planPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !content.isEmpty else { return }
@@ -390,23 +501,23 @@ struct PlanRowView: View {
     var body: some View {
         if isEditing {
             VStack(alignment: .leading, spacing: 6) {
-                TextField("目标内容", text: $editPlanText)
+                TextField(L10n.s(.planContentHint), text: $editPlanText)
                     .textFieldStyle(.roundedBorder)
                 HStack {
-                    TextField("指导原则", text: $editPlanPrompt)
+                    TextField(L10n.s(.planPromptHint), text: $editPlanPrompt)
                         .textFieldStyle(.roundedBorder)
-                    TextField("目标日期 YYYY-MM-DD", text: $editTargetDate)
+                    TextField(L10n.s(.planDateHint), text: $editTargetDate)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 160)
                 }
                 HStack {
-                    Button("Save") {
+                    Button(L10n.s(.save)) {
                         Task {
                             await bridge.updatePlan(id: item.id, content: editPlanText, customPrompt: editPlanPrompt, targetDate: editTargetDate)
                             isEditing = false
                         }
                     }.buttonStyle(.borderedProminent)
-                    Button("Cancel") { isEditing = false }.buttonStyle(.bordered)
+                    Button(L10n.s(.cancel)) { isEditing = false }.buttonStyle(.bordered)
                 }
             }.padding(.vertical, 4)
         } else {
@@ -442,7 +553,7 @@ struct PlanRowView: View {
                 }
                 
                 if !item.customPrompt.isEmpty {
-                    Text("💡 指导原则: \(item.customPrompt)")
+                    Text("\(L10n.s(.guidingPrinciple)): \(item.customPrompt)")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -454,9 +565,9 @@ struct PlanRowView: View {
             .padding(.vertical, 4)
             .alert(isPresented: $isShowingDeleteConfirm) {
                 Alert(
-                    title: Text("确认删除?"),
-                    message: Text("确实要删除此长期规划吗？"),
-                    primaryButton: .destructive(Text("删除")) {
+                    title: Text(L10n.s(.confirmDelete)),
+                    message: Text(L10n.s(.confirmDeleteMsg)),
+                    primaryButton: .destructive(Text(L10n.s(.delete))) {
                         Task { await bridge.deletePlan(id: item.id) }
                     },
                     secondaryButton: .cancel()
@@ -468,6 +579,7 @@ struct PlanRowView: View {
 
 struct DailyPanelView: View {
     @EnvironmentObject private var bridge: PythonBridgeService
+    @AppStorage("appLanguage") private var lang = "zh"
     @State private var date = Self.isoDateNow()
     @State private var summary = ""
     @State private var suggestions = ""
@@ -476,21 +588,21 @@ struct DailyPanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Daily Summary")
+            Text(L10n.s(.dailySummary))
                 .font(.custom("Avenir Next Demi Bold", size: 28))
 
             HStack {
-                TextField("日期 YYYY-MM-DD", text: $date)
+                TextField(L10n.s(.dateHint), text: $date)
                     .textFieldStyle(.roundedBorder)
                     .font(.custom("Menlo", size: 13))
                 Spacer()
-                Button("Reload") {
+                Button(L10n.s(.reload)) {
                     Task { await bridge.loadLogs() }
                 }
             }
             
             HStack {
-                Button(isGenerating ? "🤖 AI Generating..." : "🤖 AI Generate Draft") {
+                Button(isGenerating ? L10n.s(.aiGenerating) : L10n.s(.aiGenerateDraft)) {
                     Task {
                         isGenerating = true
                         if let result = await bridge.generateDailyDraft() {
@@ -518,7 +630,7 @@ struct DailyPanelView: View {
                 .frame(height: 120)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.2)))
 
-            Button("Save Daily Log") {
+            Button(L10n.s(.saveDailyLog)) {
                 Task {
                     await bridge.saveDaily(summary: summary, suggestions: suggestions, date: date)
                     summary = ""
@@ -552,13 +664,13 @@ struct DailyPanelView: View {
             .scrollIndicators(.visible)
             .sheet(item: $selectedLog) { logItem in
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("日报详情 (\(logItem.date))")
+                    Text("\(L10n.s(.detailTitle)) (\(logItem.date))")
                         .font(.custom("Avenir Next Demi Bold", size: 20))
                     
                     ScrollView(showsIndicators: true) {
                         VStack(alignment: .leading, spacing: 16) {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("💡 总结").font(.headline)
+                                Text(L10n.s(.summaryLabel)).font(.headline)
                                 Text(logItem.summary)
                                     .font(.body)
                                     .textSelection(.enabled)
@@ -567,7 +679,7 @@ struct DailyPanelView: View {
                             Divider()
                             
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("🎯 建议").font(.headline)
+                                Text(L10n.s(.suggestionLabel)).font(.headline)
                                 Text(logItem.suggestions)
                                     .font(.body)
                                     .textSelection(.enabled)
@@ -580,7 +692,7 @@ struct DailyPanelView: View {
                     
                     HStack {
                         Spacer()
-                        Button("Close") {
+                        Button(L10n.s(.close)) {
                             selectedLog = nil
                         }
                         .keyboardShortcut(.defaultAction)
@@ -607,25 +719,26 @@ struct DailyPanelView: View {
 
 struct LLMSettingsPanelView: View {
     @EnvironmentObject private var bridge: PythonBridgeService
+    @AppStorage("appLanguage") private var lang = "zh"
     @State private var pullModelName = ""
     @State private var runPrompt = "Say hello from local Ollama"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("LLM Configuration")
+            Text(L10n.s(.llmConfiguration))
                 .font(.custom("Avenir Next Demi Bold", size: 28))
 
             Picker("Mode", selection: $bridge.llmSettings.mode) {
-                Text("Use API").tag("api")
-                Text("Use Ollama (Local)").tag("ollama")
+                Text(L10n.s(.useAPI)).tag("api")
+                Text(L10n.s(.useOllama)).tag("ollama")
             }
             .pickerStyle(.segmented)
 
             if bridge.llmSettings.mode == "api" {
                 Group {
-                    TextField("API URL (OpenAI-compatible /chat/completions)", text: $bridge.llmSettings.apiURL)
+                    TextField(L10n.s(.apiUrlHint), text: $bridge.llmSettings.apiURL)
                         .textFieldStyle(.roundedBorder)
-                    Text("💡 输入基础 URL 即可 (如 https://api.openai.com)，系统会自动补全 /v1/chat/completions")
+                    Text(L10n.s(.apiUrlTip))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     SecureField("API Key", text: $bridge.llmSettings.apiKey)
@@ -642,17 +755,17 @@ struct LLMSettingsPanelView: View {
                 }
 
                 HStack(spacing: 10) {
-                    Button("Start Ollama") {
+                    Button(L10n.s(.startOllama)) {
                         Task { await bridge.startOllamaService() }
                     }
                     .buttonStyle(.borderedProminent)
 
-                    Button("Check Status") {
+                    Button(L10n.s(.checkStatus)) {
                         Task { await bridge.refreshOllamaStatus() }
                     }
                     .buttonStyle(.bordered)
 
-                    Button("List Models") {
+                    Button(L10n.s(.listModels)) {
                         Task { await bridge.listOllamaModels() }
                     }
                     .buttonStyle(.bordered)
@@ -674,7 +787,7 @@ struct LLMSettingsPanelView: View {
 
                 if !bridge.ollamaModels.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Installed Models")
+                        Text(L10n.s(.installedModels))
                             .font(.custom("Avenir Next Demi Bold", size: 16))
                         ScrollView(showsIndicators: true) {
                             LazyVStack(alignment: .leading, spacing: 4) {
@@ -698,7 +811,7 @@ struct LLMSettingsPanelView: View {
                     .frame(height: 80)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.2)))
 
-                Button("Run Current Model") {
+                Button(L10n.s(.runModel)) {
                     let prompt = runPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !prompt.isEmpty else { return }
                     Task { await bridge.runOllamaPrompt(prompt: prompt) }
@@ -716,17 +829,17 @@ struct LLMSettingsPanelView: View {
             }
 
             HStack(spacing: 12) {
-                Button("Save") {
+                Button(L10n.s(.save)) {
                     Task { await bridge.saveLLMSettings() }
                 }
                 .buttonStyle(.borderedProminent)
 
-                Button("Test Connection") {
+                Button(L10n.s(.testConnection)) {
                     Task { await bridge.testLLMConnection() }
                 }
                 .buttonStyle(.bordered)
 
-                Button("Reload") {
+                Button(L10n.s(.reload)) {
                     Task { await bridge.loadLLMSettings() }
                 }
                 .buttonStyle(.bordered)
@@ -749,24 +862,24 @@ struct LLMSettingsPanelView: View {
             Divider()
 
             // Shell Security Mode
-            Text("Shell Security Mode")
+            Text(L10n.s(.shellSecurityMode))
                 .font(.custom("Avenir Next Demi Bold", size: 18))
 
             Picker("Security Mode", selection: $bridge.shellSecurityMode) {
-                Text("Strict — 用户审查每条命令").tag("strict")
-                Text("Agent — AI 自主判断").tag("agent")
-                Text("Self-supervised — LLM 安全审查").tag("self_supervised")
+                Text(L10n.s(.strictLabel)).tag("strict")
+                Text(L10n.s(.agentLabel)).tag("agent")
+                Text(L10n.s(.selfSupervisedLabel)).tag("self_supervised")
             }
             .pickerStyle(.radioGroup)
 
             Group {
                 switch bridge.shellSecurityMode {
                 case "strict":
-                    Text("每条 Shell 命令执行前都需要用户手动确认，最安全。")
+                    Text(L10n.s(.strictDesc))
                 case "agent":
-                    Text("AI 可执行大部分命令，但黑名单中的危险命令 (rm -rf, mkfs 等) 仍被拦截。")
+                    Text(L10n.s(.agentDesc))
                 case "self_supervised":
-                    Text("所有命令先经 LLM 安全审查后再执行，需要 LLM 已配置。")
+                    Text(L10n.s(.selfSupervisedDesc))
                 default:
                     EmptyView()
                 }
@@ -774,7 +887,7 @@ struct LLMSettingsPanelView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
-            Button("Apply") {
+            Button(L10n.s(.apply)) {
                 Task { await bridge.setShellSecurityMode(bridge.shellSecurityMode) }
             }
             .buttonStyle(.bordered)
@@ -792,34 +905,35 @@ struct LLMSettingsPanelView: View {
 
 struct ProductivityPanelView: View {
     @EnvironmentObject private var bridge: PythonBridgeService
+    @AppStorage("appLanguage") private var lang = "zh"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Productivity")
+                Text(L10n.s(.productivity))
                     .font(.custom("Avenir Next Demi Bold", size: 28))
                 Spacer()
-                Button("Refresh") {
+                Button(L10n.s(.refresh)) {
                     Task { await bridge.loadProductivityReminders() }
                 }
                 .buttonStyle(.borderedProminent)
             }
 
             HStack(spacing: 10) {
-                metricCard(title: "Tracked", value: String(format: "%.1fh", bridge.productivityUsage.totalTrackedHours))
-                metricCard(title: "Focus", value: String(format: "%.1fh", bridge.productivityUsage.focusHours))
-                metricCard(title: "Distract", value: String(format: "%.1fh", bridge.productivityUsage.distractionHours))
-                metricCard(title: "Switches", value: "\(bridge.productivityUsage.contextSwitches)")
-                metricCard(title: "Distract %", value: String(format: "%.0f%%", bridge.productivityUsage.distractionRatio * 100.0))
+                metricCard(title: L10n.s(.tracked), value: String(format: "%.1fh", bridge.productivityUsage.totalTrackedHours))
+                metricCard(title: L10n.s(.focus), value: String(format: "%.1fh", bridge.productivityUsage.focusHours))
+                metricCard(title: L10n.s(.distract), value: String(format: "%.1fh", bridge.productivityUsage.distractionHours))
+                metricCard(title: L10n.s(.switches), value: "\(bridge.productivityUsage.contextSwitches)")
+                metricCard(title: L10n.s(.distractPct), value: String(format: "%.0f%%", bridge.productivityUsage.distractionRatio * 100.0))
             }
 
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Top Apps")
+                    Text(L10n.s(.topApps))
                         .font(.custom("Avenir Next Demi Bold", size: 17))
 
                     if bridge.productivityUsage.topApps.isEmpty {
-                        Text("暂无数据")
+                        Text(L10n.s(.noData))
                             .foregroundStyle(.secondary)
                     } else {
                         ScrollView(showsIndicators: true) {
@@ -843,11 +957,11 @@ struct ProductivityPanelView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Background Hotspots")
+                    Text(L10n.s(.backgroundHotspots))
                         .font(.custom("Avenir Next Demi Bold", size: 17))
 
                     if bridge.productivityUsage.backgroundHotspots.isEmpty {
-                        Text("暂无数据")
+                        Text(L10n.s(.noData))
                             .foregroundStyle(.secondary)
                     } else {
                         ScrollView(showsIndicators: true) {
@@ -873,11 +987,11 @@ struct ProductivityPanelView: View {
 
             Divider()
 
-            Text("Reminders")
+            Text(L10n.s(.reminders))
                 .font(.custom("Avenir Next Demi Bold", size: 19))
 
             if bridge.productivityReminders.isEmpty {
-                Text("暂无提醒，点击 Refresh 获取最新分析")
+                Text(L10n.s(.noReminders))
                     .foregroundStyle(.secondary)
             } else {
                 ScrollView(showsIndicators: true) {
@@ -898,7 +1012,7 @@ struct ProductivityPanelView: View {
                                 }
                                 Text(reminder.message)
                                     .font(.custom("Avenir Next", size: 14))
-                                Text("建议: \(reminder.action)")
+                                Text("\(L10n.s(.suggestion)): \(reminder.action)")
                                     .font(.custom("Avenir Next", size: 13))
                                     .foregroundStyle(.secondary)
                             }

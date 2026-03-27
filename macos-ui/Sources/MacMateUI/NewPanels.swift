@@ -1,31 +1,33 @@
 import SwiftUI
+import Charts
 
 // MARK: - Scene Profile Panel
 
 struct ScenePanelView: View {
     @EnvironmentObject private var bridge: PythonBridgeService
+    @AppStorage("appLanguage") private var lang = "zh"
     @State private var statusMessage = ""
     @State private var isActivating = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Scene Profiles")
+            Text(L10n.s(.sceneProfiles))
                 .font(.custom("Avenir Next Demi Bold", size: 28))
 
-            Text("一键切换工作/休闲模式，自动管理应用和勿扰状态")
+            Text(L10n.s(.sceneSubtitle))
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 20) {
                 sceneCard(
-                    title: "专注模式",
-                    subtitle: "开启勿扰 · 关闭社交 · 启动 Terminal",
+                    title: L10n.s(.focusMode),
+                    subtitle: L10n.s(.focusSub),
                     icon: "brain.head.profile",
                     gradient: [.blue, .indigo],
                     action: { await activateScene("focus") }
                 )
                 sceneCard(
-                    title: "休闲模式",
-                    subtitle: "关闭办公App · 关闭勿扰",
+                    title: L10n.s(.relaxMode),
+                    subtitle: L10n.s(.relaxSub),
                     icon: "cup.and.saucer",
                     gradient: [.orange, .pink],
                     action: { await activateScene("relax") }
@@ -82,12 +84,12 @@ struct ScenePanelView: View {
 
     private func activateScene(_ profile: String) async {
         isActivating = true
-        statusMessage = "切换中..."
+        statusMessage = L10n.s(.switching)
         do {
             let envelope = try await bridge.rawRequest(action: "scene_activate", payload: ["profile": .string(profile)])
-            statusMessage = envelope.result?.objectValue?["result"]?.stringValue ?? "完成"
+            statusMessage = envelope.result?.objectValue?["result"]?.stringValue ?? "Done"
         } catch {
-            statusMessage = "失败: \(error.localizedDescription)"
+            statusMessage = "Error: \(error.localizedDescription)"
         }
         isActivating = false
     }
@@ -97,19 +99,22 @@ struct ScenePanelView: View {
 
 struct MusicPanelView: View {
     @EnvironmentObject private var bridge: PythonBridgeService
+    @AppStorage("appLanguage") private var lang = "zh"
     @State private var selectedApp = "apple_music"
     @State private var genre = ""
     @State private var statusMessage = ""
     @State private var nowPlaying = ""
 
-    private let apps = [("apple_music", "Apple Music"), ("netease", "网易云音乐")]
+    private var apps: [(String, String)] {
+        [("apple_music", "Apple Music"), ("netease", L10n.current == .zh ? "网易云音乐" : "NetEase Music")]
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Music")
                 .font(.custom("Avenir Next Demi Bold", size: 28))
 
-            Picker("Player", selection: $selectedApp) {
+            Picker(L10n.s(.playerLabel), selection: $selectedApp) {
                 ForEach(apps, id: \.0) { app in
                     Text(app.1).tag(app.0)
                 }
@@ -118,16 +123,16 @@ struct MusicPanelView: View {
             .frame(width: 300)
 
             HStack(spacing: 12) {
-                TextField("歌单关键词 (仅 Apple Music)", text: $genre)
+                TextField(L10n.s(.playlistHint), text: $genre)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 250)
 
-                Button("▶ Play") {
+                Button("▶ \(L10n.s(.play))") {
                     Task { await musicAction("play", extra: ["genre": .string(genre)]) }
                 }
                 .buttonStyle(.borderedProminent)
 
-                Button("⏸ Pause") {
+                Button("⏸ \(L10n.s(.pause))") {
                     Task { await musicAction("pause") }
                 }
                 .buttonStyle(.bordered)
@@ -144,7 +149,7 @@ struct MusicPanelView: View {
             }
 
             HStack(spacing: 12) {
-                Text("Volume:")
+                Text(L10n.s(.volume))
                 ForEach([25, 50, 75, 100], id: \.self) { level in
                     Button("\(level)%") {
                         Task { await musicAction("volume", extra: ["level": .string(String(level))]) }
@@ -155,7 +160,7 @@ struct MusicPanelView: View {
 
                 Spacer()
 
-                Button("🎵 Now Playing") {
+                Button(L10n.s(.nowPlaying)) {
                     Task { await musicAction("now_playing") }
                 }
                 .buttonStyle(.bordered)
@@ -204,78 +209,112 @@ struct MusicPanelView: View {
     }
 }
 
-// MARK: - Weather Panel
+// MARK: - Weather Panel (Enhanced)
 
 struct WeatherPanelView: View {
     @EnvironmentObject private var bridge: PythonBridgeService
+    @AppStorage("appLanguage") private var lang = "zh"
     @State private var city = ""
-    @State private var weatherData: [String: String] = [:]
+    @State private var currentWeather: [String: String] = [:]
+    @State private var hourlyData: [[String: String]] = []
+    @State private var forecastData: [[String: String]] = []
     @State private var isLoading = false
     @State private var errorMessage = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Weather")
-                .font(.custom("Avenir Next Demi Bold", size: 28))
+        ScrollView(showsIndicators: true) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(L10n.s(.weather))
+                    .font(.custom("Avenir Next Demi Bold", size: 28))
 
-            HStack(spacing: 12) {
-                TextField("城市 (留空自动定位)", text: $city)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 250)
+                // City input
+                HStack(spacing: 12) {
+                    TextField(L10n.s(.cityHint), text: $city)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 250)
+                        .onSubmit { Task { await fetchWeather() } }
 
-                Button("查询天气") {
-                    Task { await fetchWeather() }
+                    Button(L10n.s(.queryWeather)) {
+                        Task { await fetchWeather() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isLoading)
+
+                    if isLoading {
+                        ProgressView().controlSize(.small)
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(isLoading)
 
-                if isLoading {
-                    ProgressView().controlSize(.small)
+                if !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .foregroundColor(.red)
+                        .font(.caption)
+                }
+
+                // Current weather card
+                if !currentWeather.isEmpty {
+                    currentWeatherCard
+                }
+
+                // Hourly chart
+                if !hourlyData.isEmpty {
+                    Text(L10n.current == .zh ? "今日逐时天气" : "Today's Hourly Weather")
+                        .font(.custom("Avenir Next Demi Bold", size: 18))
+
+                    hourlyChart
+                        .frame(height: 200)
+
+                    // Hourly detail table
+                    hourlyTable
+                }
+
+                // 3-day forecast
+                if !forecastData.isEmpty {
+                    Text(L10n.current == .zh ? "未来天气" : "Forecast")
+                        .font(.custom("Avenir Next Demi Bold", size: 18))
+
+                    HStack(spacing: 12) {
+                        ForEach(forecastData, id: \.["date"]) { day in
+                            forecastCard(day)
+                        }
+                    }
                 }
             }
-
-            if !weatherData.isEmpty {
-                weatherCard
+            .padding(.trailing, 8)
+        }
+        .scrollIndicators(.visible)
+        .onAppear {
+            if currentWeather.isEmpty {
+                Task { await fetchWeather() }
             }
-
-            if !errorMessage.isEmpty {
-                Text(errorMessage)
-                    .foregroundColor(.red)
-                    .font(.caption)
-            }
-
-            Spacer()
         }
     }
 
-    private var weatherCard: some View {
+    // MARK: - Current Weather Card
+    private var currentWeatherCard: some View {
         VStack(spacing: 16) {
             HStack(alignment: .top, spacing: 24) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(weatherData["city"] ?? "")
+                    Text(currentWeather["city"] ?? "")
                         .font(.custom("Avenir Next Demi Bold", size: 22))
-
-                    Text(weatherData["description"] ?? "")
+                    Text(currentWeather["description"] ?? "")
                         .font(.custom("Avenir Next", size: 16))
                         .foregroundStyle(.secondary)
                 }
-
                 Spacer()
-
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text("\(weatherData["temp_c"] ?? "?")°C")
+                    Text("\(currentWeather["temp_c"] ?? "?")°C")
                         .font(.system(size: 42, weight: .light))
-
-                    Text("体感 \(weatherData["feels_like_c"] ?? "?")°C")
+                    Text("\(L10n.s(.feelsLike)) \(currentWeather["feels_like_c"] ?? "?")°C")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
 
             HStack(spacing: 24) {
-                weatherStat(icon: "humidity", label: "湿度", value: "\(weatherData["humidity"] ?? "?")%")
-                weatherStat(icon: "wind", label: "风速", value: "\(weatherData["wind_speed_kmh"] ?? "?") km/h")
-                weatherStat(icon: "safari", label: "风向", value: weatherData["wind_dir"] ?? "?")
+                weatherStat(icon: "humidity", label: L10n.s(.humidity), value: "\(currentWeather["humidity"] ?? "?")%")
+                weatherStat(icon: "wind", label: L10n.s(.windSpeed), value: "\(currentWeather["wind_speed_kmh"] ?? "?") km/h")
+                weatherStat(icon: "safari", label: L10n.s(.windDir), value: currentWeather["wind_dir"] ?? "?")
             }
         }
         .padding(20)
@@ -289,6 +328,123 @@ struct WeatherPanelView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
+    // MARK: - Hourly Chart
+    private var hourlyChart: some View {
+        Chart(hourlyData.indices, id: \.self) { idx in
+            let item = hourlyData[idx]
+            let hour = item["hour"] ?? ""
+            let temp = Double(item["temp_c"] ?? "0") ?? 0
+
+            LineMark(
+                x: .value("Hour", hour),
+                y: .value("°C", temp)
+            )
+            .foregroundStyle(Color.orange)
+            .interpolationMethod(.catmullRom)
+
+            PointMark(
+                x: .value("Hour", hour),
+                y: .value("°C", temp)
+            )
+            .foregroundStyle(Color.orange)
+            .annotation(position: .top) {
+                Text("\(Int(temp))°")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+            }
+
+            let rain = Double(item["chance_of_rain"] ?? "0") ?? 0
+            if rain > 0 {
+                BarMark(
+                    x: .value("Hour", hour),
+                    y: .value("Rain %", rain * 0.3)  // scale down
+                )
+                .foregroundStyle(Color.blue.opacity(0.25))
+            }
+        }
+        .chartYAxisLabel("°C")
+        .padding(8)
+        .background(Color.secondary.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    // MARK: - Hourly Table
+    private var hourlyTable: some View {
+        ScrollView(.horizontal, showsIndicators: true) {
+            HStack(spacing: 0) {
+                ForEach(hourlyData.indices, id: \.self) { idx in
+                    let item = hourlyData[idx]
+                    VStack(spacing: 6) {
+                        Text(item["hour"] ?? "")
+                            .font(.custom("Menlo", size: 11))
+                        Text("\(item["temp_c"] ?? "?")°")
+                            .font(.custom("Avenir Next Demi Bold", size: 14))
+                        Text(item["description"] ?? "")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        HStack(spacing: 2) {
+                            Image(systemName: "drop")
+                                .font(.system(size: 8))
+                                .foregroundColor(.blue)
+                            Text("\(item["chance_of_rain"] ?? "0")%")
+                                .font(.system(size: 9))
+                                .foregroundColor(.blue)
+                        }
+                    }
+                    .frame(width: 56)
+                    .padding(.vertical, 8)
+                    if idx < hourlyData.count - 1 {
+                        Divider()
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .background(Color.secondary.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    // MARK: - Forecast Card
+    private func forecastCard(_ day: [String: String]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(day["date"] ?? "")
+                .font(.custom("Menlo", size: 12).bold())
+
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 10))
+                    .foregroundColor(.red)
+                Text("\(day["max_c"] ?? "?")°")
+                    .font(.custom("Avenir Next Demi Bold", size: 16))
+
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 10))
+                    .foregroundColor(.blue)
+                Text("\(day["min_c"] ?? "?")°")
+                    .font(.custom("Avenir Next", size: 16))
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 8) {
+                Label(day["sunrise"] ?? "", systemImage: "sunrise")
+                    .font(.caption2)
+                Label(day["sunset"] ?? "", systemImage: "sunset")
+                    .font(.caption2)
+            }
+            .foregroundStyle(.secondary)
+
+            Text("UV \(day["uv_index"] ?? "?")")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Color.secondary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    // MARK: - Helpers
     private func weatherStat(icon: String, label: String, value: String) -> some View {
         VStack(spacing: 4) {
             Image(systemName: icon)
@@ -304,23 +460,55 @@ struct WeatherPanelView: View {
     private func fetchWeather() async {
         isLoading = true
         errorMessage = ""
-        weatherData = [:]
+        currentWeather = [:]
+        hourlyData = []
+        forecastData = []
 
         do {
             let envelope = try await bridge.rawRequest(action: "weather", payload: ["city": .string(city)])
-            if let resultStr = envelope.result?.objectValue?["result"]?.stringValue,
-               let data = resultStr.data(using: .utf8),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                if let err = json["error"] as? String {
+            if let weatherObj = envelope.result?.objectValue?["weather"]?.objectValue {
+                // Check for error
+                if let err = weatherObj["error"]?.stringValue {
                     errorMessage = err
-                } else {
-                    for (k, v) in json {
-                        weatherData[k] = "\(v)"
+                    isLoading = false
+                    return
+                }
+
+                // Current conditions
+                var current: [String: String] = [:]
+                for key in ["city", "temp_c", "feels_like_c", "humidity", "description", "wind_speed_kmh", "wind_dir", "observation_time"] {
+                    current[key] = weatherObj[key]?.stringValue ?? ""
+                }
+                currentWeather = current
+
+                // Hourly
+                if let hourlyArr = weatherObj["hourly"]?.arrayValue {
+                    hourlyData = hourlyArr.compactMap { item -> [String: String]? in
+                        guard let obj = item.objectValue else { return nil }
+                        var row: [String: String] = [:]
+                        for key in ["hour", "temp_c", "feels_like_c", "description", "humidity", "chance_of_rain", "wind_kmh"] {
+                            row[key] = obj[key]?.stringValue ?? ""
+                        }
+                        return row
                     }
                 }
+
+                // Forecast
+                if let forecastArr = weatherObj["forecast"]?.arrayValue {
+                    forecastData = forecastArr.compactMap { item -> [String: String]? in
+                        guard let obj = item.objectValue else { return nil }
+                        var row: [String: String] = [:]
+                        for key in ["date", "max_c", "min_c", "avg_c", "sunrise", "sunset", "uv_index"] {
+                            row[key] = obj[key]?.stringValue ?? ""
+                        }
+                        return row
+                    }
+                }
+            } else {
+                errorMessage = L10n.current == .zh ? "后端无返回数据" : "No data returned"
             }
         } catch {
-            errorMessage = "请求失败: \(error.localizedDescription)"
+            errorMessage = "\(L10n.current == .zh ? "请求失败" : "Request failed"): \(error.localizedDescription)"
         }
         isLoading = false
     }

@@ -7,6 +7,15 @@
 
 **This project is still under development and many functions have not been fully verified.**
 
+--- 
+
+### Usage:
+```bash
+cd macos-ui/
+swift run
+```
+
+---
 
 MacMate is an intelligent, privacy-first desktop assistant designed specifically for macOS. By deeply integrating the ReAct (Reasoning and Acting) agent framework with native macOS capabilities, MacMate transcends standard chat interfaces, functioning as an active, localized copilot that understands your system, habits, and schedule.
 
