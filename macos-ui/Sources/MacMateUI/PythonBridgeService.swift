@@ -456,18 +456,32 @@ final class PythonBridgeService: ObservableObject {
         statusText = "running quadrant analysis..."
         do {
             let res = try await request(action: "quadrant_analysis", payload: ["period": .string(period)])
-            if let result = res.result?.objectValue,
-               let arr = result["data"]?.arrayValue {
-                self.quadrantItems = arr.compactMap {
-                    if let obj = $0.objectValue {
-                        return QuadrantItem.from(json: obj)
-                    }
-                    return nil
+            if let result = res.result?.objectValue {
+                // Check for backend error first
+                if let errorMsg = result["error"]?.stringValue, !errorMsg.isEmpty {
+                    statusText = "Failed: \(errorMsg)"
+                    self.quadrantItems = []
+                    return
                 }
-                statusText = "quadrant analysis done"
+                
+                if let arr = result["data"]?.arrayValue {
+                    self.quadrantItems = arr.compactMap {
+                        if let obj = $0.objectValue {
+                            return QuadrantItem.from(json: obj)
+                        }
+                        return nil
+                    }
+                    statusText = quadrantItems.isEmpty
+                        ? "Failed: 分析未返回有效数据"
+                        : "quadrant analysis done"
+                } else {
+                    statusText = "Failed: 后端返回格式异常"
+                }
+            } else {
+                statusText = "Failed: 后端无返回"
             }
         } catch {
-            statusText = "Failed to load quadrant analysis."
+            statusText = "Failed to load quadrant analysis: \(error.localizedDescription)"
         }
     }
 

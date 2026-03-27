@@ -252,8 +252,10 @@ class BridgeRuntime:
                 return {"summary": f"[生成失败] {e}", "suggestion": ""}
 
         if action == "quadrant_analysis":
-            if self.brain is None or self.adapter is None:
-                return {"error": "LLM backend or Calendar unavailable.", "data": []}
+            if self.brain is None:
+                return {"error": "LLM 未配置，请先在 LLM Settings 中设置。", "data": []}
+            if self.adapter is None:
+                return {"error": f"日历组件不可用: {self.calendar_error or '未知原因'}", "data": []}
 
             period = payload.get("period", "today")
             now = datetime.now()
@@ -266,13 +268,18 @@ class BridgeRuntime:
                 end_str = (now + timedelta(days=7)).strftime("%Y-%m-%d %H:%M")
                 
             events_data = self.adapter.get_detailed_events(now_str, end_str)
-            events_text = json.dumps(events_data, ensure_ascii=False) if events_data else "没有事件"
+            if not events_data:
+                return {"error": f"在 {now_str} ~ {end_str} 范围内没有找到日历事件。", "data": []}
+
+            events_text = json.dumps(events_data, ensure_ascii=False)
             
             try:
                 classified = self.brain.classify_events(events_text)
-                return {"data": classified or []}
+                if not classified:
+                    return {"error": "LLM 分析返回空结果。", "data": []}
+                return {"data": classified}
             except Exception as e:
-                return {"error": str(e), "data": []}
+                return {"error": f"LLM 分析失败: {e}", "data": []}
 
         if action == "daily_save":
             date_str = payload.get("date") or datetime.now().strftime("%Y-%m-%d")

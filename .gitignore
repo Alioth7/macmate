@@ -4,6 +4,10 @@ agent_docx.md
 data/llm_config.json
 dist/
 macos-ui/.build/
+macos-ui/.build
+MacMate_Demo_Doc.md
+*.png
+MacMate_项目说明书.md
 
 __pycache__/
 *.pyc

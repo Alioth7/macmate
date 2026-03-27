@@ -69,5 +69,34 @@ class ToolRegistry:
     def get_descriptions(self):
         return self.tool_descriptions
 
+    def get_available_descriptions(self):
+        """返回工具描述，标注不可用的工具"""
+        lines = []
+        for name, func in self.tools.items():
+            sig = inspect.signature(func)
+            params = [f"{k}" for k in sig.parameters.keys() if k != 'self']
+            
+            # 检查是否需要绑定实例但没有绑定
+            param_keys = list(sig.parameters.keys())
+            needs_instance = param_keys and param_keys[0] == 'self'
+            has_instance = name in self.bound_instances
+            
+            if needs_instance and not has_instance:
+                # 跳过不可用的工具，不展示给 LLM
+                continue
+            
+            # 从 tool_descriptions 中找到对应的描述
+            desc_line = None
+            for d in self.tool_descriptions.strip().split('\n'):
+                if d.startswith(f"- {name}("):
+                    desc_line = d
+                    break
+            if desc_line:
+                lines.append(desc_line)
+            else:
+                lines.append(f"- {name}({', '.join(params)})")
+        
+        return '\n'.join(lines) + '\n' if lines else self.tool_descriptions
+
 # 全局工具注册表
 registry = ToolRegistry()

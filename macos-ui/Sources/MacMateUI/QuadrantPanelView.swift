@@ -144,9 +144,11 @@ struct QuadrantPanelView: View {
             errorMessage = ""
             await bridge.loadQuadrantAnalysis(period: period)
             if bridge.quadrantItems.isEmpty {
-                errorMessage = bridge.statusText.contains("Failed") || bridge.statusText.contains("error")
+                errorMessage = bridge.statusText.contains("Failed")
                     ? bridge.statusText
                     : "分析未返回数据，请检查LLM配置和日历权限。"
+            } else {
+                errorMessage = ""
             }
             isLoading = false
         }
